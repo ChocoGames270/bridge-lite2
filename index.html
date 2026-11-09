@@ -5,11 +5,28 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Bridge Lite</title>
     
-    <!-- Enlaces obligatorios para PWA -->
+    <!-- Enlaces obligatorios para PWA (rutas relativas: funcionan en la subruta de GitHub Pages) -->
     <link rel="manifest" href="manifest.json">
+    <link rel="icon" type="image/png" href="icons/icon-192.png">
+    <link rel="apple-touch-icon" href="icons/icon-192.png">
     <meta name="theme-color" content="#121212">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-title" content="Bridge Lite">
+
+    <!-- Captura el instalador nativo lo antes posible (el evento puede llegar antes que web.js) -->
+    <script>
+      window.__pwaInstall = null;
+      window.addEventListener("beforeinstallprompt", function (e) {
+        e.preventDefault();
+        window.__pwaInstall = e;
+        window.dispatchEvent(new Event("pwa-install-ready"));
+      });
+      window.addEventListener("appinstalled", function () {
+        window.__pwaInstall = null;
+        window.dispatchEvent(new Event("pwa-installed"));
+      });
+    </script>
 
     <style>
         :root {
@@ -104,16 +121,16 @@
             <p id="pay-msg">Cargando modo...</p>
             
             <div style="display: flex; gap: 8px; margin-bottom: 10px;">
-                <button class="chip" data-amount="0">$0</button>
-                <button class="chip" data-amount="5">$5</button>
-                <button class="chip" data-amount="20">$20</button>
-                <button class="chip" data-amount="50">$50</button>
+                <button type="button" class="chip" data-amount="0">$0</button>
+                <button type="button" class="chip" data-amount="5">$5</button>
+                <button type="button" class="chip" data-amount="20">$20</button>
+                <button type="button" class="chip" data-amount="50">$50</button>
             </div>
 
-            <input type="number" id="pay-amount" min="0" max="100" value="0">
+            <input type="number" id="pay-amount" min="0" max="100" value="0" inputmode="numeric">
             <input type="range" id="pay-slider" min="0" max="100" value="0">
             
-                        <a id="btn-apk" href="#" class="btn-primary" style="margin-top: 15px;" onclick="event.preventDefault();">
+            <a id="btn-apk" href="#" role="button" class="btn-primary" style="margin-top: 15px;">
                 <span id="btn-apk-label">DESCARGAR APK</span>
             </a>
 
@@ -123,23 +140,26 @@
         <div class="chat-inputs">
             <h3>Consola de IA</h3>
             <textarea id="user-prompt" placeholder="Escribe tu consulta o instrucción para la IA..."></textarea>
-            <button id="btn-enviar-ai">Enviar a la IA</button>
+            <button type="button" id="btn-enviar-ai">Enviar a la IA</button>
             
             <h4>Respuesta:</h4>
             <div id="ai-output">Esperando interacción...</div>
         </div>
     </div>
 
-    <!-- Script para registrar el Service Worker y habilitar la instalación de la App -->
+    <!-- Service Worker (ruta relativa: su alcance será la subruta del repositorio) -->
     <script>
       if ("serviceWorker" in navigator) {
-        window.addEventListener("load", () => {
-          navigator.serviceWorker.register("sw.js").catch(err => console.log(err));
+        window.addEventListener("load", function () {
+          navigator.serviceWorker.register("sw.js").catch(function (err) {
+            console.log("[PWA] No se pudo registrar el Service Worker:", err);
+          });
         });
       }
     </script>
     
-    <!-- Tu script principal que maneja el slider y la IA -->
+    <!-- onboarding.js debe cargarse ANTES de web.js -->
+    <script src="js/onboarding.js"></script>
     <script src="js/web.js"></script>
 </body>
 </html>
