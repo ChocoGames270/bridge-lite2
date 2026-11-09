@@ -4,8 +4,13 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Bridge Lite</title>
+    
+    <!-- Enlaces obligatorios para PWA -->
     <link rel="manifest" href="manifest.json">
-    <meta name="theme-color" content="#111111">
+    <meta name="theme-color" content="#121212">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+
     <style>
         :root {
             --bg-primary: #121212;
@@ -67,6 +72,7 @@
             text-align: center;
             display: block;
             text-decoration: none;
+            font-weight: bold;
         }
         .btn-disabled {
             background: #555;
@@ -92,7 +98,7 @@
     <div class="container">
         <h1>Bridge Lite</h1>
 
-        <!-- Sección de pagos / aportes -->
+        <!-- Sección de pagos / aportes y slider controlado por tu web.js -->
         <div class="panel-chat">
             <h3>Apoyo al Proyecto</h3>
             <p id="pay-msg">Cargando modo...</p>
@@ -115,8 +121,6 @@
         <!-- Sección de Consola BYOK / Inputs -->
         <div class="chat-inputs">
             <h3>Consola de IA</h3>
-            <!-- El panel de API Key se inyectará aquí automáticamente por web.js -->
-            
             <textarea id="user-prompt" placeholder="Escribe tu consulta o instrucción para la IA..."></textarea>
             <button id="btn-enviar-ai">Enviar a la IA</button>
             
@@ -125,10 +129,16 @@
         </div>
     </div>
 
-    <!-- Carga del onboarding (asegúrate de incluirlo si web.js lo requiere) -->
-    <!-- <script src="js/onboarding.js"></script> -->
-
-    <!-- Tu script principal -->
+    <!-- Script para registrar el Service Worker y habilitar la instalación de la App -->
+    <script>
+      if ("serviceWorker" in navigator) {
+        window.addEventListener("load", () => {
+          navigator.serviceWorker.register("sw.js").catch(err => console.log(err));
+        });
+      }
+    </script>
+    
+    <!-- Tu script principal que maneja el slider y la IA -->
     <script src="js/web.js"></script>
 </body>
 </html>
