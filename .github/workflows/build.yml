@@ -19,10 +19,13 @@ jobs:
         distribution: 'temurin'
         java-version: '17'
 
-    - name: Compilar con Gradle Wrapper
-      run: |
-        chmod +x ./gradlew
-        ./gradlew assembleDebug
+    - name: Configurar Gradle y Compilar
+      uses: gradle/actions/setup-gradle@v3
+      with:
+        gradle-version: '7.6.4'
+
+    - name: Ejecutar Compilación de Android
+      run: gradle assembleDebug
 
     - name: Subir APK
       uses: actions/upload-artifact@v4
