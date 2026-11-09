@@ -5,12 +5,130 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Bridge Lite</title>
     <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#111111">
+    <style>
+        :root {
+            --bg-primary: #121212;
+            --bg-secondary: #1e1e1e;
+            --text-main: #ffffff;
+            --text-muted: #aaaaaa;
+            --accent-color: #00ffcc;
+            --accent-secondary: #ff4444;
+            --border-color: #333333;
+            --radius-sm: 8px;
+        }
+        body {
+            background-color: var(--bg-primary);
+            color: var(--text-main);
+            font-family: sans-serif;
+            margin: 0;
+            padding: 20px;
+            box-sizing: border-box;
+        }
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+        }
+        .panel-chat, .chat-inputs {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-sm);
+            padding: 16px;
+            margin-bottom: 16px;
+        }
+        input, textarea, select {
+            width: 100%;
+            background: var(--bg-primary);
+            color: var(--text-main);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-sm);
+            padding: 10px;
+            margin-bottom: 10px;
+            box-sizing: border-box;
+        }
+        button, .chip {
+            background: var(--border-color);
+            color: var(--text-main);
+            border: none;
+            padding: 10px 16px;
+            border-radius: var(--radius-sm);
+            cursor: pointer;
+            font-weight: bold;
+        }
+        .chip.active {
+            background: var(--accent-color);
+            color: #000;
+        }
+        .btn-primary {
+            background: var(--accent-color);
+            color: #000;
+            width: 100%;
+            padding: 12px;
+            text-align: center;
+            display: block;
+            text-decoration: none;
+        }
+        .btn-disabled {
+            background: #555;
+            color: #aaa;
+            width: 100%;
+            padding: 12px;
+            text-align: center;
+            display: block;
+            text-decoration: none;
+        }
+        #ai-output {
+            background: var(--bg-primary);
+            padding: 12px;
+            border-radius: var(--radius-sm);
+            border: 1px solid var(--border-color);
+            white-space: pre-wrap;
+            min-height: 80px;
+        }
+    </style>
 </head>
 <body>
 
-    <!-- Aquí va el contenido o la estructura de tu web -->
+    <div class="container">
+        <h1>Bridge Lite</h1>
 
-    <!-- Coloca tu script aquí abajo, justo antes de cerrar el body -->
+        <!-- Sección de pagos / aportes -->
+        <div class="panel-chat">
+            <h3>Apoyo al Proyecto</h3>
+            <p id="pay-msg">Cargando modo...</p>
+            
+            <div style="display: flex; gap: 8px; margin-bottom: 10px;">
+                <button class="chip" data-amount="0">$0</button>
+                <button class="chip" data-amount="5">$5</button>
+                <button class="chip" data-amount="20">$20</button>
+                <button class="chip" data-amount="50">$50</button>
+            </div>
+
+            <input type="number" id="pay-amount" min="0" max="100" value="0">
+            <input type="range" id="pay-slider" min="0" max="100" value="0">
+            
+            <a id="btn-apk" href="#" class="btn-primary" style="margin-top: 15px;">
+                <span id="btn-apk-label">DESCARGAR APK</span>
+            </a>
+        </div>
+
+        <!-- Sección de Consola BYOK / Inputs -->
+        <div class="chat-inputs">
+            <h3>Consola de IA</h3>
+            <!-- El panel de API Key se inyectará aquí automáticamente por web.js -->
+            
+            <textarea id="user-prompt" placeholder="Escribe tu consulta o instrucción para la IA..."></textarea>
+            <button id="btn-enviar-ai">Enviar a la IA</button>
+            
+            <h4>Respuesta:</h4>
+            <div id="ai-output">Esperando interacción...</div>
+        </div>
+    </div>
+
+    <!-- Carga del onboarding (asegúrate de incluirlo si web.js lo requiere) -->
+    <!-- <script src="js/onboarding.js"></script> -->
+
+    <!-- Tu script principal -->
     <script src="js/web.js"></script>
 </body>
 </html>
