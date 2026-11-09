@@ -1,21 +1,33 @@
 {
-  "name": "Bridge Lite",
-  "short_name": "BridgeLite",
-  "start_url": "/nombre-de-tu-repositorio/",
-  "scope": "/nombre-de-tu-repositorio/",
+  "id": "./",
+  "name": "AI Bridge Lite",
+  "short_name": "Bridge Lite",
+  "description": "Puente de IA para desarrollo móvil de juegos (BYOK).",
+  "lang": "es",
+  "start_url": "./",
+  "scope": "./",
   "display": "standalone",
+  "orientation": "portrait",
   "background_color": "#121212",
   "theme_color": "#121212",
   "icons": [
     {
-      "src": "icon-192.png",
+      "src": "icons/icon-192.png",
       "sizes": "192x192",
-      "type": "image/png"
+      "type": "image/png",
+      "purpose": "any"
     },
     {
-      "src": "icon-512.png",
+      "src": "icons/icon-512.png",
       "sizes": "512x512",
-      "type": "image/png"
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
     }
   ]
 }
