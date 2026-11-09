@@ -1,4 +1,4 @@
-/* AI Bridge Lite - Web: Aportaciones ($0 a $100), Enlace APK y Consola BYOK */
+/* AI Bridge Lite - Web: Aportaciones ($0 a $100), Instalación PWA y Consola BYOK */
 (function (global) {
   "use strict";
 
@@ -22,18 +22,20 @@
     hibrido: "Eres un asistente de desarrollo de juegos. Usa las capturas, el código y las propiedades del objeto para ayudar. Sé conciso."
   };
 
-  /* ============ 1. SLIDER DE APORTES ($0 a $100) ============ */
+  /* ============ 1. SLIDER DE APORTES ($0 a $100) + INSTALACIÓN PWA ============ */
   const MIN = 0;
   const MAX = 100;
 
   const MENSAJES = {
-    gratis: "Modo Gratuito activo (BYOK). Para usar la consola o descargar la APK en este modo, requerirás tu propia API Key.",
-    pago: "¡Gracias por apoyar el proyecto! Las aportaciones de dinero real y pasarela de pago directa se habilitarán en la versión 1.0."
+    gratis: "Modo Gratuito activo (BYOK). Toca el botón para instalar la app; para usar la consola necesitarás tu propia API Key.",
+    pago: "¡Gracias por apoyar el proyecto! Las aportaciones de dinero real y pasarela de pago directa se habilitarán en la versión 1.0.",
+    pagoClick: "Las aportaciones de pago estarán disponibles próximamente.",
+    yaInstalada: "Ya estás usando la app instalada.",
+    instalando: "¡Listo! Instalando la app en tu dispositivo...",
+    cancelada: "Instalación cancelada. Puedes intentarlo de nuevo cuando quieras.",
+    ios: "En iPhone/iPad: abre esta página en Safari, toca Compartir y elige «Añadir a pantalla de inicio».",
+    manual: "Abre el menú ⋮ de Chrome y toca «Instalar aplicación» (o «Añadir a la pantalla de inicio»). Si no aparece, recarga la página una vez."
   };
-
-  // Corrige el ancla: la sección de la consola no tenía id.
-  const panelChat = document.querySelector(".panel-chat");
-  if (panelChat && !panelChat.id) panelChat.id = "panel-chat";
 
   const input = $("pay-amount");
   const slider = $("pay-slider");
@@ -41,6 +43,32 @@
   const btn = $("btn-apk");
   const btnLabel = $("btn-apk-label");
   const chips = document.querySelectorAll(".chip[data-amount]");
+
+  const setMsg = (t) => { if (msg) msg.textContent = t; };
+
+  const esStandalone = () =>
+    (global.matchMedia && global.matchMedia("(display-mode: standalone)").matches) ||
+    global.navigator.standalone === true;
+
+  const esIOS = () => /iphone|ipad|ipod/i.test(global.navigator.userAgent);
+
+  async function instalarApp() {
+    if (esStandalone()) { setMsg(MENSAJES.yaInstalada); return; }
+
+    const ev = global.__pwaInstall; // capturado en el <head> de index.html
+    if (ev) {
+      try {
+        await ev.prompt();
+        const r = await ev.userChoice;
+        global.__pwaInstall = null; // el evento solo se puede usar una vez
+        setMsg(r && r.outcome === "accepted" ? MENSAJES.instalando : MENSAJES.cancelada);
+      } catch (_) {
+        setMsg(MENSAJES.manual);
+      }
+      return;
+    }
+    setMsg(esIOS() ? MENSAJES.ios : MENSAJES.manual);
+  }
 
   if (input && slider && btn) {
     const clamp = (v) => {
@@ -61,25 +89,32 @@
 
       btn.dataset.amount = monto;
 
+      // El href nunca cambia (siempre "#" con preventDefault): sin saltos de página.
       if (monto === 0) {
-        if (msg) msg.textContent = MENSAJES.gratis;
+        setMsg(MENSAJES.gratis);
         btn.className = "btn-primary";
-        if (btnLabel) btnLabel.textContent = "DESCARGAR APK (GRATIS - BYOK)";
-        btn.href = "#panel-chat";
+        btn.removeAttribute("aria-disabled");
+        if (btnLabel) {
+          btnLabel.textContent = esStandalone()
+            ? "APP INSTALADA ✔"
+            : "INSTALAR APP (GRATIS - BYOK)";
+        }
       } else {
-        if (msg) msg.textContent = MENSAJES.pago;
+        setMsg(MENSAJES.pago);
         btn.className = "btn-disabled";
+        btn.setAttribute("aria-disabled", "true");
         if (btnLabel) btnLabel.textContent = `APORTAR $${monto} (PRÓXIMAMENTE)`;
-        btn.href = "#descarga";
       }
     };
 
     btn.addEventListener("click", (event) => {
+      event.preventDefault(); // siempre: evita el salto al "#"
       const monto = parseFloat(btn.dataset.amount || "0");
       if (monto !== 0) {
-        event.preventDefault();
-        if (msg) msg.textContent = "Las aportaciones de pago estarán disponibles próximamente.";
+        setMsg(MENSAJES.pagoClick);
+        return;
       }
+      instalarApp();
     });
 
     input.addEventListener("input", () => actualizarFlujo(input.value, "input"));
@@ -88,6 +123,11 @@
     chips.forEach((c) =>
       c.addEventListener("click", () => actualizarFlujo(c.dataset.amount))
     );
+
+    global.addEventListener("pwa-installed", () => {
+      actualizarFlujo(btn.dataset.amount || 0);
+      setMsg(MENSAJES.instalando);
+    });
 
     actualizarFlujo(0);
   }
