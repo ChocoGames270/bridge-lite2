@@ -1,0 +1,11 @@
+workflows:
+  android-workflow:
+    name: Android Workflow
+    environment:
+      java: 17
+    scripts:
+      - name: Build APK
+        script: |
+          ./gradlew assembleDebug || gradle assembleDebug
+    artifacts:
+      - app/build/outputs/apk/debug/*.apk
