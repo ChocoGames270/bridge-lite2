@@ -1,165 +1,213 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Bridge Lite</title>
-    
-    <!-- Enlaces obligatorios para PWA (rutas relativas: funcionan en la subruta de GitHub Pages) -->
-    <link rel="manifest" href="manifest.json">
-    <link rel="icon" type="image/png" href="icons/icon-192.png">
-    <link rel="apple-touch-icon" href="icons/icon-192.png">
-    <meta name="theme-color" content="#121212">
-    <meta name="mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-title" content="Bridge Lite">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI Bridge Lite — Consola</title>
+  <meta name="theme-color" content="#020205">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
 
-    <!-- Captura el instalador nativo lo antes posible (el evento puede llegar antes que web.js) -->
-    <script>
-      window.__pwaInstall = null;
-      window.addEventListener("beforeinstallprompt", function (e) {
-        e.preventDefault();
-        window.__pwaInstall = e;
-        window.dispatchEvent(new Event("pwa-install-ready"));
-      });
-      window.addEventListener("appinstalled", function () {
-        window.__pwaInstall = null;
-        window.dispatchEvent(new Event("pwa-installed"));
-      });
-    </script>
+  <!-- Estética Cyberpunk original (copia de css/styles.css del Repo 1, sin cambios) -->
+  <link rel="stylesheet" href="css/styles.css?v=1">
 
-    <style>
-        :root {
-            --bg-primary: #121212;
-            --bg-secondary: #1e1e1e;
-            --text-main: #ffffff;
-            --text-muted: #aaaaaa;
-            --accent-color: #00ffcc;
-            --accent-secondary: #ff4444;
-            --border-color: #333333;
-            --radius-sm: 8px;
-        }
-        body {
-            background-color: var(--bg-primary);
-            color: var(--text-main);
-            font-family: sans-serif;
-            margin: 0;
-            padding: 20px;
-            box-sizing: border-box;
-        }
-        .container {
-            max-width: 600px;
-            margin: 0 auto;
-        }
-        .panel-chat, .chat-inputs {
-            background: var(--bg-secondary);
-            border: 1px solid var(--border-color);
-            border-radius: var(--radius-sm);
-            padding: 16px;
-            margin-bottom: 16px;
-        }
-        input, textarea, select {
-            width: 100%;
-            background: var(--bg-primary);
-            color: var(--text-main);
-            border: 1px solid var(--border-color);
-            border-radius: var(--radius-sm);
-            padding: 10px;
-            margin-bottom: 10px;
-            box-sizing: border-box;
-        }
-        button, .chip {
-            background: var(--border-color);
-            color: var(--text-main);
-            border: none;
-            padding: 10px 16px;
-            border-radius: var(--radius-sm);
-            cursor: pointer;
-            font-weight: bold;
-        }
-        .chip.active {
-            background: var(--accent-color);
-            color: #000;
-        }
-        .btn-primary {
-            background: var(--accent-color);
-            color: #000;
-            width: 100%;
-            padding: 12px;
-            text-align: center;
-            display: block;
-            text-decoration: none;
-            font-weight: bold;
-        }
-        .btn-disabled {
-            background: #555;
-            color: #aaa;
-            width: 100%;
-            padding: 12px;
-            text-align: center;
-            display: block;
-            text-decoration: none;
-        }
-        #ai-output {
-            background: var(--bg-primary);
-            padding: 12px;
-            border-radius: var(--radius-sm);
-            border: 1px solid var(--border-color);
-            white-space: pre-wrap;
-            min-height: 80px;
-        }
-    </style>
+  <!-- Solo formularios y elementos nuevos; usa las variables del tema -->
+  <style>
+    [hidden] { display: none !important; }
+    .card h2 { font-size: 1rem; }
+    .eslogan { color: var(--text-muted); font-size: 0.85rem; margin-bottom: 0.6rem; }
+    .etiqueta { display: block; font-size: 0.8rem; color: var(--text-muted); margin: 0.8rem 0 0.4rem; }
+    .chips-wrap { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; }
+    .chip { min-height: 44px; }
+    select, input[type="text"], input[type="password"] {
+      display: block; width: 100%; min-height: 44px;
+      background-color: #03050b; color: var(--text-main);
+      border: 1px solid var(--border-color); border-radius: var(--radius-sm);
+      padding: 10px; font-family: 'Courier New', Courier, monospace;
+      outline: none; margin-bottom: 8px;
+    }
+    select:focus, input[type="text"]:focus, input[type="password"]:focus {
+      border-color: var(--accent-color); box-shadow: 0 0 8px var(--accent-glow);
+    }
+    .fila { display: flex; gap: 8px; }
+    .fila > * { flex: 1; }
+    .estado { font-size: 0.8rem; margin-top: 6px; color: var(--text-muted); }
+    .estado.ok { color: var(--accent-color); }
+    .estado.alerta { color: var(--accent-secondary); }
+    .aviso { border: 1px dashed var(--accent-secondary); border-radius: var(--radius-sm); padding: 10px; margin-bottom: 12px; }
+    .aviso p { color: var(--accent-secondary); font-size: 0.85rem; margin-bottom: 8px; }
+    details { border: 1px solid var(--border-color); border-radius: var(--radius-sm); margin: 10px 0; background: #03050b; }
+    summary { cursor: pointer; padding: 0.7rem 0.9rem; min-height: 44px; color: var(--accent-color); font-weight: bold; }
+    details textarea { border: 0; border-top: 1px solid var(--border-color); }
+    .thumbs { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0; }
+    .thumbs img { width: 64px; height: 64px; object-fit: cover; border: 1px solid var(--accent-color); border-radius: var(--radius-sm); }
+    .btn-primary { cursor: pointer; }
+    .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+    .cabecera-consola { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+    .cabecera-consola h1 { font-size: 1.1rem; margin-bottom: 0; }
+    footer.pie { text-align: center; color: var(--text-muted); font-size: 0.75rem; padding: 0.5rem 0 5rem; }
+  </style>
 </head>
 <body>
 
-    <div class="container">
-        <h1>Bridge Lite</h1>
+  <main class="container">
 
-        <!-- Sección de pagos / aportes y slider controlado por tu web.js -->
-        <div class="panel-chat">
-            <h3>Apoyo al Proyecto</h3>
-            <p id="pay-msg">Cargando modo...</p>
-            
-            <div style="display: flex; gap: 8px; margin-bottom: 10px;">
-                <button type="button" class="chip" data-amount="0">$0</button>
-                <button type="button" class="chip" data-amount="5">$5</button>
-                <button type="button" class="chip" data-amount="20">$20</button>
-                <button type="button" class="chip" data-amount="50">$50</button>
-            </div>
+    <!-- ============ PANTALLA 1: BIENVENIDA / CONFIGURACIÓN INICIAL ============ -->
+    <section id="pantalla-config" hidden>
 
-            <input type="number" id="pay-amount" min="0" max="100" value="0" inputmode="numeric">
-            <input type="range" id="pay-slider" min="0" max="100" value="0">
-            
-            <a id="btn-apk" href="#" role="button" class="btn-primary" style="margin-top: 15px;">
-                <span id="btn-apk-label">DESCARGAR APK</span>
-            </a>
+      <header class="card">
+        <h1>
+          <span class="cyber-pet-static">
+            <svg viewBox="0 0 24 24" width="32" height="32" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <rect x="11" y="1" width="2" height="3" fill="#00ffcc"/>
+              <rect x="10" y="0" width="4" height="1" fill="#00ffcc"/>
+              <rect x="4" y="4" width="16" height="12" fill="#ff007f" rx="1"/>
+              <rect x="2" y="7" width="2" height="6" fill="#00ffcc"/>
+              <rect x="20" y="7" width="2" height="6" fill="#00ffcc"/>
+              <rect x="6" y="6" width="12" height="8" fill="#020205"/>
+              <rect x="8" y="8" width="3" height="2" fill="#ff007f"/>
+              <rect x="13" y="8" width="3" height="2" fill="#ff007f"/>
+              <rect x="9" y="11" width="6" height="1" fill="#00ffcc"/>
+              <rect x="5" y="18" width="3" height="4" fill="#00ffcc"/>
+              <rect x="16" y="18" width="3" height="4" fill="#00ffcc"/>
+              <rect x="4" y="21" width="2" height="2" fill="#ff007f"/>
+              <rect x="18" y="21" width="2" height="2" fill="#ff007f"/>
+            </svg>
+          </span>
+          <span>Bienvenido</span>
+        </h1>
+        <p class="eslogan">Un puente. Todas las IA. Tu creatividad.</p>
+        <p>Configura tu proveedor, tu modelo y tu API Key para empezar. Tu clave se guarda solo en este dispositivo y se envía directamente al proveedor de IA que elijas.</p>
+      </header>
 
+      <section class="card">
+        <h2>1 · Idioma y enfoque</h2>
+        <label class="etiqueta" for="cfg-idioma">Idioma de respuesta de la IA</label>
+        <select id="cfg-idioma">
+          <option value="es">Español</option>
+          <option value="en">English</option>
+          <option value="pt">Português</option>
+        </select>
+        <span class="etiqueta">Áreas de enfoque (elige las que quieras)</span>
+        <div class="chips-wrap">
+          <button type="button" class="chip" data-area="scripts">Scripts</button>
+          <button type="button" class="chip" data-area="3d">3D</button>
+          <button type="button" class="chip" data-area="vfx">VFX</button>
+          <button type="button" class="chip" data-area="aprendiz">Aprendiz</button>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>2 · Proveedor y modelo</h2>
+        <span class="etiqueta">Proveedor de IA</span>
+        <div class="chips-wrap">
+          <button type="button" class="chip" data-proveedor="gemini">Gemini</button>
+          <button type="button" class="chip" data-proveedor="claude">Claude</button>
+          <button type="button" class="chip" data-proveedor="openai">OpenAI</button>
+        </div>
+        <label class="etiqueta" for="cfg-modelo">Modelo</label>
+        <select id="cfg-modelo"></select>
+        <input type="text" id="cfg-modelo-custom" placeholder="Escribe el nombre exacto del modelo" autocomplete="off" autocapitalize="off" spellcheck="false" hidden>
+      </section>
+
+      <section class="card">
+        <h2>3 · API Key (BYOK)</h2>
+        <label class="etiqueta" for="cfg-key">Tu API Key de <span id="cfg-key-proveedor">Gemini</span></label>
+        <input type="password" id="cfg-key" placeholder="Pega tu API Key" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false">
+        <div class="fila">
+          <button type="button" class="chip" id="btn-ver-key">VER</button>
+          <button type="button" class="chip" id="btn-guardar-key">GUARDAR</button>
+          <button type="button" class="chip" id="btn-borrar-key">BORRAR</button>
+        </div>
+        <p class="estado" id="cfg-key-estado" role="status" aria-live="polite"></p>
+      </section>
+
+      <button type="button" id="btn-empezar" class="btn-primary">EMPEZAR</button>
+      <p class="estado" style="text-align:center;">Puedes empezar sin API Key y configurarla después.</p>
+
+    </section>
+
+    <!-- ============ PANTALLA 2: CONSOLA DE IA ============ -->
+    <section id="pantalla-consola" hidden>
+
+      <header class="card">
+        <div class="cabecera-consola">
+          <h1>Consola de IA</h1>
+          <button type="button" class="chip" id="btn-ajustes">AJUSTES</button>
+        </div>
+        <p class="estado" id="estado-conexion"></p>
+      </header>
+
+      <section class="card">
+        <div class="aviso" id="aviso-key" hidden>
+          <p id="aviso-key-texto">Falta tu API Key. Configúrala para poder usar la IA.</p>
+          <button type="button" class="chip" id="btn-aviso-ajustes">CONFIGURAR AHORA</button>
         </div>
 
-        <!-- Sección de Consola BYOK / Inputs -->
-        <div class="chat-inputs">
-            <h3>Consola de IA</h3>
-            <textarea id="user-prompt" placeholder="Escribe tu consulta o instrucción para la IA..."></textarea>
-            <button type="button" id="btn-enviar-ai">Enviar a la IA</button>
-            
-            <h4>Respuesta:</h4>
-            <div id="ai-output">Esperando interacción...</div>
+        <span class="etiqueta">Perfil</span>
+        <div class="chips-wrap">
+          <button type="button" class="chip" data-perfil="visual">Visual</button>
+          <button type="button" class="chip" data-perfil="script">Script</button>
+          <button type="button" class="chip" data-perfil="hibrido">Híbrido</button>
+          <button type="button" class="chip" data-perfil="optimizacion">Optimización</button>
         </div>
-    </div>
 
-    <!-- Service Worker (ruta relativa: su alcance será la subruta del repositorio) -->
-    <script>
-      if ("serviceWorker" in navigator) {
-        window.addEventListener("load", function () {
-          navigator.serviceWorker.register("sw.js").catch(function (err) {
-            console.log("[PWA] No se pudo registrar el Service Worker:", err);
-          });
-        });
-      }
-    </script>
-    
-    <!-- onboarding.js debe cargarse ANTES de web.js -->
-    <script src="js/onboarding.js"></script>
-    <script src="js/web.js"></script>
+        <label class="etiqueta" for="user-prompt">Tu intención o consulta</label>
+        <textarea id="user-prompt" placeholder="Escribe tu intención o consulta técnica aquí..." rows="4"></textarea>
+
+        <details>
+          <summary>Añadir código (opcional)</summary>
+          <textarea id="user-snippet" placeholder="Pega aquí el fragmento de código relevante..." rows="5"></textarea>
+        </details>
+
+        <span class="etiqueta">Imágenes o secuencia (máx. 5)</span>
+        <div class="chips-wrap">
+          <label class="chip" for="user-imagenes" style="display:inline-flex;align-items:center;">+ IMÁGENES</label>
+          <button type="button" class="chip" id="btn-limpiar-img" hidden>QUITAR</button>
+        </div>
+        <input type="file" id="user-imagenes" accept="image/*" multiple hidden>
+        <div class="thumbs" id="miniaturas"></div>
+
+        <button type="button" id="btn-enviar-ai" class="btn-primary">Enviar a la IA</button>
+
+        <div class="chat-response">
+          <strong>Respuesta:</strong>
+          <p id="ai-output" style="white-space: pre-wrap; margin-top: 5px;">Esperando consulta...</p>
+        </div>
+        <div class="fila" style="margin-top:10px;">
+          <button type="button" class="chip" id="btn-copiar">COPIAR RESPUESTA</button>
+        </div>
+      </section>
+
+    </section>
+
+    <footer class="pie">
+      <small>AI Bridge Lite — One bridge. Every AI. Your creativity.</small>
+    </footer>
+
+  </main>
+
+  <!-- MASCOTA FLOTANTE EN ESQUINA INFERIOR DERECHA -->
+  <div class="cyber-pet-float">
+    <svg viewBox="0 0 24 24" width="36" height="36" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <rect x="11" y="1" width="2" height="3" fill="#00ffcc"/>
+      <rect x="10" y="0" width="4" height="1" fill="#00ffcc"/>
+      <rect x="4" y="4" width="16" height="12" fill="#ff007f" rx="1"/>
+      <rect x="2" y="7" width="2" height="6" fill="#00ffcc"/>
+      <rect x="20" y="7" width="2" height="6" fill="#00ffcc"/>
+      <rect x="6" y="6" width="12" height="8" fill="#020205"/>
+      <rect x="8" y="8" width="3" height="2" fill="#ff007f"/>
+      <rect x="13" y="8" width="3" height="2" fill="#ff007f"/>
+      <rect x="9" y="11" width="6" height="1" fill="#00ffcc"/>
+      <rect x="5" y="18" width="3" height="4" fill="#00ffcc"/>
+      <rect x="16" y="18" width="3" height="4" fill="#00ffcc"/>
+      <rect x="4" y="21" width="2" height="2" fill="#ff007f"/>
+      <rect x="18" y="21" width="2" height="2" fill="#ff007f"/>
+    </svg>
+  </div>
+
+  <!-- onboarding.js debe cargarse ANTES de consola.js -->
+  <script src="js/onboarding.js?v=1"></script>
+  <script src="js/consola.js?v=1"></script>
 </body>
 </html>
