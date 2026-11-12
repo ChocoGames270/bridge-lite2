@@ -2,212 +2,277 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>AI Bridge Lite — Consola</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
+  <title>AI Bridge Lite</title>
   <meta name="theme-color" content="#020205">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
-
-  <!-- Estética Cyberpunk original (copia de css/styles.css del Repo 1, sin cambios) -->
-  <link rel="stylesheet" href="css/styles.css?v=1">
-
-  <!-- Solo formularios y elementos nuevos; usa las variables del tema -->
-  <style>
-    [hidden] { display: none !important; }
-    .card h2 { font-size: 1rem; }
-    .eslogan { color: var(--text-muted); font-size: 0.85rem; margin-bottom: 0.6rem; }
-    .etiqueta { display: block; font-size: 0.8rem; color: var(--text-muted); margin: 0.8rem 0 0.4rem; }
-    .chips-wrap { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; }
-    .chip { min-height: 44px; }
-    select, input[type="text"], input[type="password"] {
-      display: block; width: 100%; min-height: 44px;
-      background-color: #03050b; color: var(--text-main);
-      border: 1px solid var(--border-color); border-radius: var(--radius-sm);
-      padding: 10px; font-family: 'Courier New', Courier, monospace;
-      outline: none; margin-bottom: 8px;
-    }
-    select:focus, input[type="text"]:focus, input[type="password"]:focus {
-      border-color: var(--accent-color); box-shadow: 0 0 8px var(--accent-glow);
-    }
-    .fila { display: flex; gap: 8px; }
-    .fila > * { flex: 1; }
-    .estado { font-size: 0.8rem; margin-top: 6px; color: var(--text-muted); }
-    .estado.ok { color: var(--accent-color); }
-    .estado.alerta { color: var(--accent-secondary); }
-    .aviso { border: 1px dashed var(--accent-secondary); border-radius: var(--radius-sm); padding: 10px; margin-bottom: 12px; }
-    .aviso p { color: var(--accent-secondary); font-size: 0.85rem; margin-bottom: 8px; }
-    details { border: 1px solid var(--border-color); border-radius: var(--radius-sm); margin: 10px 0; background: #03050b; }
-    summary { cursor: pointer; padding: 0.7rem 0.9rem; min-height: 44px; color: var(--accent-color); font-weight: bold; }
-    details textarea { border: 0; border-top: 1px solid var(--border-color); }
-    .thumbs { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0; }
-    .thumbs img { width: 64px; height: 64px; object-fit: cover; border: 1px solid var(--accent-color); border-radius: var(--radius-sm); }
-    .btn-primary { cursor: pointer; }
-    .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
-    .cabecera-consola { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
-    .cabecera-consola h1 { font-size: 1.1rem; margin-bottom: 0; }
-    footer.pie { text-align: center; color: var(--text-muted); font-size: 0.75rem; padding: 0.5rem 0 5rem; }
-  </style>
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Bridge Lite">
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" type="image/png" href="icons/icon-192.png">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <link rel="stylesheet" href="css/chat.css?v=2">
 </head>
 <body>
 
-  <main class="container">
+  <!-- Iconos (se usan con <svg class="ic"><use href="#i-nombre"/></svg>) -->
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <symbol id="i-menu" viewBox="0 0 24 24"><path d="M3 6h18M3 12h18M3 18h18"/></symbol>
+    <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+    <symbol id="i-newchat" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/><path d="M12 7v6M9 10h6"/></symbol>
+    <symbol id="i-dots" viewBox="0 0 24 24"><circle cx="12" cy="5" r="1.5" fill="currentColor"/><circle cx="12" cy="12" r="1.5" fill="currentColor"/><circle cx="12" cy="19" r="1.5" fill="currentColor"/></symbol>
+    <symbol id="i-mic" viewBox="0 0 24 24"><path d="M12 2a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"/><path d="M19 10v1a7 7 0 0 1-14 0v-1M12 18v4"/></symbol>
+    <symbol id="i-send" viewBox="0 0 24 24"><path d="M22 2L11 13"/><path d="M22 2l-7 20-4-9-9-4 20-7z"/></symbol>
+    <symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6L6 18M6 6l12 12"/></symbol>
+    <symbol id="i-image" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></symbol>
+    <symbol id="i-file" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></symbol>
+    <symbol id="i-code" viewBox="0 0 24 24"><path d="M16 18l6-6-6-6M8 6l-6 6 6 6"/></symbol>
+    <symbol id="i-pin" viewBox="0 0 24 24"><path d="M12 17v5M9 3h6l-1 7 3 3v2H7v-2l3-3z"/></symbol>
+    <symbol id="i-trash" viewBox="0 0 24 24"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"/></symbol>
+    <symbol id="i-share" viewBox="0 0 24 24"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="M8.6 13.5l6.8 4M15.4 6.5l-6.8 4"/></symbol>
+    <symbol id="i-like" viewBox="0 0 24 24"><path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.3a2 2 0 0 0 2-1.7l1.4-9a2 2 0 0 0-2-2.3z"/><path d="M7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3"/></symbol>
+    <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M23 4v6h-6M1 20v-6h6"/><path d="M3.5 9a9 9 0 0 1 14.9-3.4L23 10M1 14l4.6 4.4A9 9 0 0 0 20.5 15"/></symbol>
+    <symbol id="i-copy" viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></symbol>
+    <symbol id="i-sliders" viewBox="0 0 24 24"><path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6"/></symbol>
+    <symbol id="i-user" viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></symbol>
+    <symbol id="i-chevron" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></symbol>
+  </svg>
 
-    <!-- ============ PANTALLA 1: BIENVENIDA / CONFIGURACIÓN INICIAL ============ -->
-    <section id="pantalla-config" hidden>
+  <div id="app">
 
-      <header class="card">
-        <h1>
-          <span class="cyber-pet-static">
-            <svg viewBox="0 0 24 24" width="32" height="32" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <rect x="11" y="1" width="2" height="3" fill="#00ffcc"/>
-              <rect x="10" y="0" width="4" height="1" fill="#00ffcc"/>
-              <rect x="4" y="4" width="16" height="12" fill="#ff007f" rx="1"/>
-              <rect x="2" y="7" width="2" height="6" fill="#00ffcc"/>
-              <rect x="20" y="7" width="2" height="6" fill="#00ffcc"/>
-              <rect x="6" y="6" width="12" height="8" fill="#020205"/>
-              <rect x="8" y="8" width="3" height="2" fill="#ff007f"/>
-              <rect x="13" y="8" width="3" height="2" fill="#ff007f"/>
-              <rect x="9" y="11" width="6" height="1" fill="#00ffcc"/>
-              <rect x="5" y="18" width="3" height="4" fill="#00ffcc"/>
-              <rect x="16" y="18" width="3" height="4" fill="#00ffcc"/>
-              <rect x="4" y="21" width="2" height="2" fill="#ff007f"/>
-              <rect x="18" y="21" width="2" height="2" fill="#ff007f"/>
-            </svg>
-          </span>
-          <span>Bienvenido</span>
-        </h1>
-        <p class="eslogan">Un puente. Todas las IA. Tu creatividad.</p>
-        <p>Configura tu proveedor, tu modelo y tu API Key para empezar. Tu clave se guarda solo en este dispositivo y se envía directamente al proveedor de IA que elijas.</p>
-      </header>
+    <!-- ============ HEADER ============ -->
+    <header class="top">
+      <button type="button" class="btn-ic" id="btn-menu" aria-label="Abrir menú">
+        <svg class="ic"><use href="#i-menu"/></svg>
+      </button>
 
-      <section class="card">
-        <h2>1 · Idioma y enfoque</h2>
-        <label class="etiqueta" for="cfg-idioma">Idioma de respuesta de la IA</label>
+      <div class="brand" aria-label="AI Bridge Lite">AI<span>BRIDGE</span></div>
+
+      <div class="top-der">
+        <button type="button" class="btn-ic" id="btn-nuevo-chat" aria-label="Chat nuevo">
+          <svg class="ic"><use href="#i-newchat"/></svg>
+        </button>
+        <div class="menu-wrap">
+          <button type="button" class="btn-ic" id="btn-mas" aria-label="Opciones del chat" aria-haspopup="true" aria-expanded="false">
+            <svg class="ic"><use href="#i-dots"/></svg>
+          </button>
+          <div class="popmenu der" id="menu-chat" hidden>
+            <button type="button" id="btn-fijar"><svg class="ic"><use href="#i-pin"/></svg><span id="txt-fijar">Fijar chat</span></button>
+            <button type="button" id="btn-compartir-chat"><svg class="ic"><use href="#i-share"/></svg><span>Compartir</span></button>
+            <button type="button" id="btn-borrar-chat" class="peligro"><svg class="ic"><use href="#i-trash"/></svg><span>Borrar chat</span></button>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <!-- Estado de la IA activa (toca para abrir ajustes) -->
+    <button type="button" id="chip-estado" class="chip-estado" aria-label="Abrir ajustes de IA"></button>
+
+    <!-- ============ CONVERSACIÓN ============ -->
+    <main id="chat" class="chat">
+      <div id="vacio" class="vacio">
+        <div class="logo-ai">AI</div>
+        <p>Tu puente hacia la IA</p>
+      </div>
+      <div id="mensajes" class="mensajes" aria-live="polite"></div>
+    </main>
+
+    <!-- ============ BARRA DE ENTRADA ============ -->
+    <footer class="composer">
+      <div id="adjuntos" class="adjuntos" hidden></div>
+
+      <div class="fila-input">
+        <div class="menu-wrap">
+          <button type="button" class="btn-ic btn-borde" id="btn-adjuntar" aria-label="Adjuntar" aria-haspopup="true" aria-expanded="false">
+            <svg class="ic"><use href="#i-plus"/></svg>
+          </button>
+          <div class="popmenu arriba" id="menu-adjuntar" hidden>
+            <button type="button" id="btn-adj-imagen"><svg class="ic"><use href="#i-image"/></svg><span>Imágenes</span></button>
+            <button type="button" id="btn-adj-archivo"><svg class="ic"><use href="#i-file"/></svg><span>Archivos y documentos</span></button>
+            <button type="button" id="btn-adj-codigo"><svg class="ic"><use href="#i-code"/></svg><span>Fragmento de código</span></button>
+          </div>
+        </div>
+
+        <div class="menu-wrap">
+          <button type="button" class="btn-ai" id="btn-modo-flotante" aria-label="Modo flotante" aria-haspopup="true" aria-expanded="false">AI</button>
+          <div class="popmenu arriba" id="menu-flotante" hidden>
+            <button type="button" id="btn-modo-captura" data-modo-captura="captura">
+              <svg class="ic"><use href="#i-image"/></svg><span>Modo Captura<small>Toma única</small></span>
+            </button>
+            <button type="button" id="btn-modo-multi" data-modo-captura="multi">
+              <svg class="ic"><use href="#i-copy"/></svg><span>Modo Multi-Captura<small>Ráfaga o secuencia</small></span>
+            </button>
+          </div>
+        </div>
+
+        <div class="campo">
+          <textarea id="entrada" rows="1" placeholder="Escribe un mensaje" autocomplete="off" autocapitalize="sentences" spellcheck="false" enterkeyhint="send"></textarea>
+          <button type="button" class="btn-ic" id="btn-mic" aria-label="Dictar por voz">
+            <svg class="ic"><use href="#i-mic"/></svg>
+          </button>
+          <button type="button" class="btn-ic btn-enviar" id="btn-enviar" aria-label="Enviar" disabled>
+            <svg class="ic"><use href="#i-send"/></svg>
+          </button>
+        </div>
+      </div>
+
+      <input type="file" id="file-imagenes" accept="image/*" multiple hidden>
+      <input type="file" id="file-archivos" accept=".txt,.md,.json,.csv,.xml,.html,.css,.js,.ts,.lua,.luau,.py,.cs,.cpp,.c,.h,.java,.kt,.pdf,text/*" multiple hidden>
+    </footer>
+
+  </div>
+
+  <!-- ============ PANEL LATERAL (historial + cuenta) ============ -->
+  <div id="velo" class="velo"></div>
+  <aside id="panel" class="panel" aria-hidden="true">
+    <div class="panel-cab">
+      <div class="brand">AI<span>BRIDGE</span></div>
+      <button type="button" class="btn-ic" id="btn-panel-cerrar" aria-label="Cerrar menú">
+        <svg class="ic"><use href="#i-x"/></svg>
+      </button>
+    </div>
+
+    <button type="button" class="btn-nuevo" id="btn-panel-nuevo">
+      <svg class="ic"><use href="#i-newchat"/></svg><span>Chat nuevo</span>
+    </button>
+
+    <nav id="lista-chats" class="lista-chats" aria-label="Historial de chats"></nav>
+
+    <div class="panel-pie">
+      <div class="cuenta">
+        <div class="avatar" id="cuenta-avatar"><svg class="ic"><use href="#i-user"/></svg></div>
+        <div class="cuenta-datos">
+          <strong id="cuenta-nombre">Invitado</strong>
+          <small id="cuenta-estado">Sin sesión de Google</small>
+        </div>
+      </div>
+      <button type="button" class="panel-btn" id="btn-google">
+        <svg class="ic"><use href="#i-user"/></svg><span id="txt-google">Iniciar sesión con Google</span>
+      </button>
+      <button type="button" class="panel-btn" id="btn-ajustes">
+        <svg class="ic"><use href="#i-sliders"/></svg><span>Ajustes</span>
+      </button>
+    </div>
+  </aside>
+
+  <!-- ============ MODAL: AJUSTES ============ -->
+  <div id="modal-ajustes" class="modal" hidden>
+    <div class="hoja" role="dialog" aria-modal="true" aria-labelledby="ajustes-titulo">
+      <div class="hoja-cab">
+        <h2 id="ajustes-titulo">Ajustes</h2>
+        <button type="button" class="btn-ic" id="btn-ajustes-x" aria-label="Cerrar ajustes">
+          <svg class="ic"><use href="#i-x"/></svg>
+        </button>
+      </div>
+
+      <div class="hoja-cuerpo">
+        <p class="estado" id="ajustes-intro" hidden>Elige cómo usar la IA. Puedes empezar con la IA nativa sin API Key.</p>
+
+        <h3>Motor de IA</h3>
+        <div class="seg" id="seg-modo">
+          <button type="button" class="seg-b" data-modo="nativa">IA nativa</button>
+          <button type="button" class="seg-b" data-modo="byok">Mi API Key</button>
+        </div>
+
+        <!-- IA nativa: límite semanal -->
+        <div id="bloque-nativa">
+          <div class="barra"><i id="uso-relleno"></i></div>
+          <p class="estado" id="uso-texto"></p>
+        </div>
+
+        <!-- Modo Puente (BYOK) -->
+        <div id="bloque-byok" hidden>
+          <span class="etiqueta">Proveedor</span>
+          <div class="chips">
+            <button type="button" class="chip" data-proveedor="gemini">Gemini</button>
+            <button type="button" class="chip" data-proveedor="claude">Claude</button>
+            <button type="button" class="chip" data-proveedor="openai">OpenAI</button>
+          </div>
+
+          <label class="etiqueta" for="cfg-modelo">Modelo</label>
+          <select id="cfg-modelo"></select>
+          <input type="text" id="cfg-modelo-custom" placeholder="Nombre exacto del modelo" autocomplete="off" autocapitalize="off" spellcheck="false" hidden>
+
+          <label class="etiqueta" for="cfg-key">API Key de <span id="cfg-key-proveedor">Gemini</span></label>
+          <input type="password" id="cfg-key" placeholder="Pega tu API Key" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false">
+          <div class="fila">
+            <button type="button" class="chip" id="btn-ver-key">VER</button>
+            <button type="button" class="chip" id="btn-guardar-key">GUARDAR</button>
+            <button type="button" class="chip" id="btn-borrar-key">BORRAR</button>
+          </div>
+          <p class="estado" id="cfg-key-estado" role="status" aria-live="polite"></p>
+        </div>
+
+        <h3>Preferencias</h3>
+        <label class="etiqueta" for="cfg-idioma">Idioma de respuesta</label>
         <select id="cfg-idioma">
           <option value="es">Español</option>
           <option value="en">English</option>
           <option value="pt">Português</option>
         </select>
-        <span class="etiqueta">Áreas de enfoque (elige las que quieras)</span>
-        <div class="chips-wrap">
+
+        <span class="etiqueta">Áreas de enfoque</span>
+        <div class="chips">
           <button type="button" class="chip" data-area="scripts">Scripts</button>
           <button type="button" class="chip" data-area="3d">3D</button>
           <button type="button" class="chip" data-area="vfx">VFX</button>
           <button type="button" class="chip" data-area="aprendiz">Aprendiz</button>
         </div>
-      </section>
 
-      <section class="card">
-        <h2>2 · Proveedor y modelo</h2>
-        <span class="etiqueta">Proveedor de IA</span>
-        <div class="chips-wrap">
-          <button type="button" class="chip" data-proveedor="gemini">Gemini</button>
-          <button type="button" class="chip" data-proveedor="claude">Claude</button>
-          <button type="button" class="chip" data-proveedor="openai">OpenAI</button>
-        </div>
-        <label class="etiqueta" for="cfg-modelo">Modelo</label>
-        <select id="cfg-modelo"></select>
-        <input type="text" id="cfg-modelo-custom" placeholder="Escribe el nombre exacto del modelo" autocomplete="off" autocapitalize="off" spellcheck="false" hidden>
-      </section>
-
-      <section class="card">
-        <h2>3 · API Key (BYOK)</h2>
-        <label class="etiqueta" for="cfg-key">Tu API Key de <span id="cfg-key-proveedor">Gemini</span></label>
-        <input type="password" id="cfg-key" placeholder="Pega tu API Key" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false">
-        <div class="fila">
-          <button type="button" class="chip" id="btn-ver-key">VER</button>
-          <button type="button" class="chip" id="btn-guardar-key">GUARDAR</button>
-          <button type="button" class="chip" id="btn-borrar-key">BORRAR</button>
-        </div>
-        <p class="estado" id="cfg-key-estado" role="status" aria-live="polite"></p>
-      </section>
-
-      <button type="button" id="btn-empezar" class="btn-primary">EMPEZAR</button>
-      <p class="estado" style="text-align:center;">Puedes empezar sin API Key y configurarla después.</p>
-
-    </section>
-
-    <!-- ============ PANTALLA 2: CONSOLA DE IA ============ -->
-    <section id="pantalla-consola" hidden>
-
-      <header class="card">
-        <div class="cabecera-consola">
-          <h1>Consola de IA</h1>
-          <button type="button" class="chip" id="btn-ajustes">AJUSTES</button>
-        </div>
-        <p class="estado" id="estado-conexion"></p>
-      </header>
-
-      <section class="card">
-        <div class="aviso" id="aviso-key" hidden>
-          <p id="aviso-key-texto">Falta tu API Key. Configúrala para poder usar la IA.</p>
-          <button type="button" class="chip" id="btn-aviso-ajustes">CONFIGURAR AHORA</button>
-        </div>
-
-        <span class="etiqueta">Perfil</span>
-        <div class="chips-wrap">
+        <span class="etiqueta">Perfil de respuesta</span>
+        <div class="chips">
           <button type="button" class="chip" data-perfil="visual">Visual</button>
           <button type="button" class="chip" data-perfil="script">Script</button>
           <button type="button" class="chip" data-perfil="hibrido">Híbrido</button>
           <button type="button" class="chip" data-perfil="optimizacion">Optimización</button>
         </div>
 
-        <label class="etiqueta" for="user-prompt">Tu intención o consulta</label>
-        <textarea id="user-prompt" placeholder="Escribe tu intención o consulta técnica aquí..." rows="4"></textarea>
-
-        <details>
-          <summary>Añadir código (opcional)</summary>
-          <textarea id="user-snippet" placeholder="Pega aquí el fragmento de código relevante..." rows="5"></textarea>
-        </details>
-
-        <span class="etiqueta">Imágenes o secuencia (máx. 5)</span>
-        <div class="chips-wrap">
-          <label class="chip" for="user-imagenes" style="display:inline-flex;align-items:center;">+ IMÁGENES</label>
-          <button type="button" class="chip" id="btn-limpiar-img" hidden>QUITAR</button>
+        <h3>Plan y aportaciones</h3>
+        <div class="plan">
+          <p id="plan-actual">Plan actual: Gratis</p>
+          <button type="button" class="chip" id="btn-plan" disabled>PLANES Y APORTES · PRÓXIMAMENTE</button>
         </div>
-        <input type="file" id="user-imagenes" accept="image/*" multiple hidden>
-        <div class="thumbs" id="miniaturas"></div>
+      </div>
 
-        <button type="button" id="btn-enviar-ai" class="btn-primary">Enviar a la IA</button>
-
-        <div class="chat-response">
-          <strong>Respuesta:</strong>
-          <p id="ai-output" style="white-space: pre-wrap; margin-top: 5px;">Esperando consulta...</p>
-        </div>
-        <div class="fila" style="margin-top:10px;">
-          <button type="button" class="chip" id="btn-copiar">COPIAR RESPUESTA</button>
-        </div>
-      </section>
-
-    </section>
-
-    <footer class="pie">
-      <small>AI Bridge Lite — One bridge. Every AI. Your creativity.</small>
-    </footer>
-
-  </main>
-
-  <!-- MASCOTA FLOTANTE EN ESQUINA INFERIOR DERECHA -->
-  <div class="cyber-pet-float">
-    <svg viewBox="0 0 24 24" width="36" height="36" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <rect x="11" y="1" width="2" height="3" fill="#00ffcc"/>
-      <rect x="10" y="0" width="4" height="1" fill="#00ffcc"/>
-      <rect x="4" y="4" width="16" height="12" fill="#ff007f" rx="1"/>
-      <rect x="2" y="7" width="2" height="6" fill="#00ffcc"/>
-      <rect x="20" y="7" width="2" height="6" fill="#00ffcc"/>
-      <rect x="6" y="6" width="12" height="8" fill="#020205"/>
-      <rect x="8" y="8" width="3" height="2" fill="#ff007f"/>
-      <rect x="13" y="8" width="3" height="2" fill="#ff007f"/>
-      <rect x="9" y="11" width="6" height="1" fill="#00ffcc"/>
-      <rect x="5" y="18" width="3" height="4" fill="#00ffcc"/>
-      <rect x="16" y="18" width="3" height="4" fill="#00ffcc"/>
-      <rect x="4" y="21" width="2" height="2" fill="#ff007f"/>
-      <rect x="18" y="21" width="2" height="2" fill="#ff007f"/>
-    </svg>
+      <div class="hoja-pie">
+        <button type="button" class="btn-primary" id="btn-ajustes-listo">LISTO</button>
+      </div>
+    </div>
   </div>
 
+  <!-- ============ MODAL: FRAGMENTO DE CÓDIGO ============ -->
+  <div id="modal-codigo" class="modal" hidden>
+    <div class="hoja" role="dialog" aria-modal="true" aria-labelledby="codigo-titulo">
+      <div class="hoja-cab">
+        <h2 id="codigo-titulo">Fragmento de código</h2>
+        <button type="button" class="btn-ic" id="btn-codigo-x" aria-label="Cerrar">
+          <svg class="ic"><use href="#i-x"/></svg>
+        </button>
+      </div>
+      <div class="hoja-cuerpo">
+        <input type="text" id="codigo-nombre" placeholder="Nombre o lenguaje (opcional)" autocomplete="off" autocapitalize="off" spellcheck="false">
+        <textarea id="codigo-texto" rows="10" placeholder="Pega aquí el código..." spellcheck="false" autocapitalize="off" autocorrect="off"></textarea>
+      </div>
+      <div class="hoja-pie fila">
+        <button type="button" class="chip" id="btn-codigo-cancelar">CANCELAR</button>
+        <button type="button" class="chip activo" id="btn-codigo-ok">ADJUNTAR</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ VISOR DE IMAGEN ============ -->
+  <div id="visor" class="visor" hidden>
+    <button type="button" class="btn-ic visor-x" id="visor-cerrar" aria-label="Cerrar imagen">
+      <svg class="ic"><use href="#i-x"/></svg>
+    </button>
+    <img id="visor-img" alt="Vista previa">
+  </div>
+
+  <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+
   <!-- onboarding.js debe cargarse ANTES de consola.js -->
-  <script src="js/onboarding.js?v=1"></script>
-  <script src="js/consola.js?v=1"></script>
+  <script src="js/onboarding.js?v=2"></script>
+  <script src="js/consola.js?v=2"></script>
 </body>
-</html>
+          </html>
