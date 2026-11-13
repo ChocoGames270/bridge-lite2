@@ -2,14 +2,15 @@
   "id": "./",
   "name": "AI Bridge Lite",
   "short_name": "Bridge Lite",
-  "description": "Puente de IA para desarrollo móvil de juegos (BYOK).",
+  "description": "Asistente de IA en chat: puente entre tus capturas, código y la IA que elijas.",
   "lang": "es",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
   "orientation": "portrait",
-  "background_color": "#121212",
-  "theme_color": "#121212",
+  "background_color": "#020205",
+  "theme_color": "#020205",
+  "categories": ["productivity", "developer tools"],
   "icons": [
     {
       "src": "icons/icon-192.png",
