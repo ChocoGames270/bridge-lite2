@@ -1,17 +1,18 @@
-/* AI Bridge Lite - Service Worker
+/* AI Bridge Lite - Service Worker (Repo 2)
    Rutas relativas al alcance del SW: funciona en la subruta de GitHub Pages.
    Sube CACHE_VERSION cada vez que cambies archivos de la web. */
 "use strict";
 
-const CACHE_VERSION = "v1";
+const CACHE_VERSION = "v2";
 const CACHE_NAME = "aibl-cache-" + CACHE_VERSION;
 
 const ARCHIVOS = [
   "./",
   "index.html",
   "manifest.json",
-  "js/web.js",
+  "css/chat.css",
   "js/onboarding.js",
+  "js/consola.js",
   "icons/icon-192.png",
   "icons/icon-512.png"
 ];
@@ -67,7 +68,7 @@ self.addEventListener("fetch", (event) => {
         return resp;
       })
       .catch(() =>
-        caches.match(req).then((hit) => {
+        caches.match(req, { ignoreSearch: true }).then((hit) => {
           if (hit) return hit;
           if (req.mode === "navigate") return caches.match(aUrl("index.html"));
           return Response.error();
