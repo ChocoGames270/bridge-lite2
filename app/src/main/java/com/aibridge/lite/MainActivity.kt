@@ -1,263 +1,360 @@
 package com.aibridge.lite
 
 import android.Manifest
+import android.annotation.SuppressLint
+import android.app.AlertDialog
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Color
-import android.graphics.Typeface
-import android.graphics.drawable.GradientDrawable
 import android.media.projection.MediaProjectionManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
-import android.text.InputType
-import android.view.Gravity
-import android.widget.EditText
-import android.widget.LinearLayout
-import android.widget.ScrollView
-import android.widget.TextView
+import android.view.View
+import android.view.ViewGroup
+import android.webkit.JavascriptInterface
+import android.webkit.JsResult
+import android.webkit.ValueCallback
+import android.webkit.WebChromeClient
+import android.webkit.WebResourceError
+import android.webkit.WebResourceRequest
+import android.webkit.WebSettings
+import android.webkit.WebView
+import android.webkit.WebViewClient
+import android.widget.FrameLayout
 import android.widget.Toast
 import androidx.activity.ComponentActivity
+import androidx.activity.OnBackPressedCallback
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
 import androidx.core.view.ViewCompat
+import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
+import com.aibridge.lite.capture.CaptureBuffer
 import com.aibridge.lite.capture.ScreenCaptureService
-import com.aibridge.lite.data.Provider
-import com.aibridge.lite.data.SecureStore
 import com.aibridge.lite.overlay.FloatingWidgetService
+import org.json.JSONObject
 
-/** Pantalla de configuración: proveedor, API Key (BYOK), permisos, captura y widget. */
+/**
+ * Contenedor nativo del chat (WebView en pantalla completa).
+ *  - El chat llama a AndroidBridge.iniciarFlotante(modo): se piden los permisos, se activa la captura,
+ *    aparece el botón flotante "AI" y la app se minimiza.
+ *  - Al volver a la app (mantener presionado el botón), las capturas acumuladas se entregan al chat.
+ */
 class MainActivity : ComponentActivity() {
 
-    private lateinit var store: SecureStore
-    private lateinit var status: TextView
-    private lateinit var keyInput: EditText
-    private lateinit var btnCapture: TextView
-    private lateinit var btnWidget: TextView
-    private val chips = mutableListOf<Pair<Provider, TextView>>()
+    private enum class Paso { NINGUNO, OVERLAY, CAPTURA }
 
+    private lateinit var webView: WebView
+    private var paginaLista = false
+
+    private var pendienteModo: String? = null
+    private var paso = Paso.NINGUNO
+
+    private var filePathCallback: ValueCallback<Array<Uri>>? = null
+
+    // ---------- Resultados de actividades ----------
     private val captureLauncher =
         registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { r ->
-            val data = r.data
-            if (r.resultCode == RESULT_OK && data != null) {
-                ScreenCaptureService.start(this, r.resultCode, data)
-                status.postDelayed({ refresh() }, 700)
-            } else {
-                toast("Permiso de captura cancelado")
+            if (paso == Paso.CAPTURA) {
+                val data = r.data
+                if (r.resultCode == RESULT_OK && data != null) {
+                    ScreenCaptureService.start(this, r.resultCode, data)
+                    esperarCaptura(10)
+                } else {
+                    cancelarFlujo("Permiso de captura cancelado.")
+                }
             }
         }
 
     private val notifLauncher =
-        registerForActivityResult(ActivityResultContracts.RequestPermission()) { launchCapture() }
+        registerForActivityResult(ActivityResultContracts.RequestPermission()) { lanzarCaptura() }
 
+    private val fileLauncher =
+        registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { r ->
+            val cb = filePathCallback
+            filePathCallback = null
+            cb?.onReceiveValue(WebChromeClient.FileChooserParams.parseResult(r.resultCode, r.data))
+        }
+
+    // ---------- Ciclo de vida ----------
+    @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        store = SecureStore.get(this)
-        setContentView(buildUi())
-        refresh()
+        WindowCompat.setDecorFitsSystemWindows(window, false)
+
+        webView = WebView(this).apply {
+            setBackgroundColor(DARK)
+            overScrollMode = View.OVER_SCROLL_NEVER
+            settings.apply {
+                javaScriptEnabled = true
+                domStorageEnabled = true
+                allowFileAccess = false
+                mediaPlaybackRequiresUserGesture = true
+                mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
+                setSupportZoom(false)
+                builtInZoomControls = false
+                textZoom = 100
+            }
+            webViewClient = cliente()
+            webChromeClient = chrome()
+            addJavascriptInterface(Puente(), "AndroidBridge")
+        }
+
+        val root = FrameLayout(this).apply {
+            setBackgroundColor(DARK)
+            addView(
+                webView,
+                FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
+            )
+        }
+        // Barras del sistema y teclado: se resuelven aquí (la web no recibe esos insets).
+        ViewCompat.setOnApplyWindowInsetsListener(root) { v, insets ->
+            val bars = insets.getInsets(
+                WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout()
+            )
+            val ime = insets.getInsets(WindowInsetsCompat.Type.ime())
+            v.setPadding(bars.left, bars.top, bars.right, maxOf(bars.bottom, ime.bottom))
+            WindowInsetsCompat.CONSUMED
+        }
+        setContentView(root)
+        ViewCompat.requestApplyInsets(root)
+
+        onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() = manejarAtras()
+        })
+
+        webView.loadUrl(APP_URL)
+    }
+
+    override fun onStart() {
+        super.onStart()
+        FloatingWidgetService.setHiddenByApp(true) // el botón flotante no tapa el chat
     }
 
     override fun onResume() {
         super.onResume()
-        refresh()
+        webView.onResume()
+        if (paso == Paso.OVERLAY) {
+            if (Settings.canDrawOverlays(this)) pasoCaptura()
+            else cancelarFlujo("Sin el permiso «Mostrar sobre otras apps» no funciona el botón flotante.")
+        }
+        entregarSiHay()
     }
 
-    // ---------- UI ----------
-    private fun buildUi(): ScrollView {
-        val root = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(dp(16), dp(16), dp(16), dp(24))
-        }
+    override fun onPause() {
+        webView.onPause()
+        super.onPause()
+    }
 
-        root.addView(label("AI BRIDGE LITE", CYAN, 22f, true))
-        root.addView(label("BYOK · tu API Key se guarda cifrada solo en este dispositivo", MUTED, 12f, false)
-            .apply { setPadding(0, dp(4), 0, dp(14)) })
+    override fun onStop() {
+        FloatingWidgetService.setHiddenByApp(false)
+        super.onStop()
+    }
 
-        // 1. Proveedor + API Key
-        val c1 = card("1 · PROVEEDOR Y API KEY")
-        val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-        Provider.values().forEach { p ->
-            val chip = label(p.id.uppercase(), MUTED, 12f, true).apply {
-                gravity = Gravity.CENTER
-                minHeight = dp(44)
-                setOnClickListener { store.setProvider(p); refresh() }
+    override fun onDestroy() {
+        filePathCallback?.onReceiveValue(null)
+        filePathCallback = null
+        (webView.parent as? ViewGroup)?.removeView(webView)
+        webView.destroy()
+        super.onDestroy()
+    }
+
+    // ---------- WebView ----------
+    private fun cliente() = object : WebViewClient() {
+        override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
+            val u = request.url
+            val propia = u.host == APP_HOST && (u.path ?: "").startsWith(APP_PATH)
+            if (propia) return false
+            if (u.scheme == "http" || u.scheme == "https" || u.scheme == "mailto") {
+                try { startActivity(Intent(Intent.ACTION_VIEW, u)) } catch (_: Exception) {}
             }
-            chips.add(p to chip)
-            row.addView(chip, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
-                .apply { marginEnd = dp(4) })
+            return true
         }
-        c1.addView(row)
 
-        keyInput = EditText(this).apply {
-            setTextColor(TEXT)
-            setHintTextColor(MUTED)
-            typeface = Typeface.MONOSPACE
-            textSize = 14f
-            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD or
-                    InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
-            importantForAutofill = android.view.View.IMPORTANT_FOR_AUTOFILL_NO
-            setPadding(dp(10), dp(10), dp(10), dp(10))
-            background = box(DARK, CYAN_DIM, 1)
+        override fun onPageStarted(view: WebView, url: String?, favicon: android.graphics.Bitmap?) {
+            paginaLista = false
         }
-        c1.addView(keyInput, lp().apply { topMargin = dp(10) })
-        c1.addView(button("GUARDAR KEY", CYAN) { saveKey() }, lp().apply { topMargin = dp(8) })
-        root.addView(c1)
 
-        // 2. Permiso de overlay
-        val c2 = card("2 · MOSTRAR SOBRE OTRAS APPS")
-        c2.addView(button("CONCEDER PERMISO", PINK) {
-            startActivity(
-                Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName"))
-            )
-        })
-        root.addView(c2)
+        override fun onPageFinished(view: WebView, url: String?) {
+            paginaLista = url?.startsWith(APP_URL) == true
+            entregarSiHay()
+        }
 
-        // 3. Captura
-        val c3 = card("3 · CAPTURA DE PANTALLA")
-        btnCapture = button("ACTIVAR CAPTURA", CYAN) { toggleCapture() }
-        c3.addView(btnCapture)
-        root.addView(c3)
-
-        // 4. Widget
-        val c4 = card("4 · WIDGET FLOTANTE [AI]")
-        btnWidget = button("MOSTRAR WIDGET", CYAN) { toggleWidget() }
-        c4.addView(btnWidget)
-        root.addView(c4)
-
-        // Estado
-        status = label("", TEXT, 13f, false).apply { setPadding(dp(4), dp(8), dp(4), 0) }
-        root.addView(status)
-
-        return ScrollView(this).apply {
-            setBackgroundColor(DARK)
-            clipToPadding = false
-            addView(root)
-            ViewCompat.setOnApplyWindowInsetsListener(this) { v, insets ->
-                val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
-                v.setPadding(0, bars.top, 0, bars.bottom)
-                insets
+        override fun onReceivedError(view: WebView, request: WebResourceRequest, error: WebResourceError) {
+            if (request.isForMainFrame) {
+                paginaLista = false
+                view.loadDataWithBaseURL(null, ERROR_HTML, "text/html", "UTF-8", null)
             }
         }
-    }
 
-    // ---------- Acciones ----------
-    private fun saveKey() {
-        val p = store.getProvider()
-        val raw = keyInput.text.toString().trim()
-        when {
-            raw.isEmpty() -> { store.setApiKey(p, ""); toast("Key eliminada") }
-            raw.length < SecureStore.MIN_KEY_LENGTH -> { toast("La key parece incompleta"); return }
-            else -> { store.setApiKey(p, raw); toast("Key guardada") }
+        override fun onRenderProcessGone(view: WebView, detail: android.webkit.RenderProcessGoneDetail): Boolean {
+            runOnUiThread { recreate() }
+            return true
         }
-        keyInput.setText("") // no dejar la key visible en pantalla
-        refresh()
     }
 
-    private fun toggleCapture() {
-        if (ScreenCaptureService.isRunning()) {
-            ScreenCaptureService.stop(this)
-            btnCapture.postDelayed({ refresh() }, 300)
+    private fun chrome() = object : WebChromeClient() {
+        override fun onShowFileChooser(
+            view: WebView,
+            callback: ValueCallback<Array<Uri>>,
+            params: FileChooserParams
+        ): Boolean {
+            filePathCallback?.onReceiveValue(null)
+            filePathCallback = callback
+            return try {
+                fileLauncher.launch(params.createIntent())
+                true
+            } catch (_: Exception) {
+                filePathCallback = null
+                callback.onReceiveValue(null)
+                false
+            }
+        }
+
+        override fun onJsConfirm(view: WebView, url: String?, message: String?, result: JsResult): Boolean {
+            AlertDialog.Builder(this@MainActivity)
+                .setMessage(message)
+                .setPositiveButton("Aceptar") { _, _ -> result.confirm() }
+                .setNegativeButton("Cancelar") { _, _ -> result.cancel() }
+                .setOnCancelListener { result.cancel() }
+                .show()
+            return true
+        }
+
+        override fun onJsAlert(view: WebView, url: String?, message: String?, result: JsResult): Boolean {
+            AlertDialog.Builder(this@MainActivity)
+                .setMessage(message)
+                .setPositiveButton("Aceptar") { _, _ -> result.confirm() }
+                .setOnCancelListener { result.confirm() }
+                .show()
+            return true
+        }
+    }
+
+    /** Atrás: cierra paneles/menús/modales del chat; si no hay ninguno abierto, minimiza la app. */
+    private fun manejarAtras() {
+        val js = "(function(){var g=function(i){return document.getElementById(i)};" +
+                "var o=!!document.querySelector('#panel.abierto')||!g('modal-ajustes').hidden||" +
+                "!g('modal-codigo').hidden||!g('visor').hidden||!g('menu-chat').hidden||" +
+                "!g('menu-adjuntar').hidden||!g('menu-flotante').hidden;" +
+                "if(o){document.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape'}));}return o;})()"
+        webView.evaluateJavascript(js) { r -> if (r != "true") moveTaskToBack(true) }
+    }
+
+    // ---------- Puente JS -> Android ----------
+    private inner class Puente {
+        @JavascriptInterface
+        fun iniciarFlotante(modo: String) {
+            val m = if (modo == FloatingWidgetService.MODO_MULTI) FloatingWidgetService.MODO_MULTI
+            else FloatingWidgetService.MODO_CAPTURA
+            runOnUiThread { iniciarFlujo(m) }
+        }
+
+        @JavascriptInterface
+        fun detenerFlotante() {
+            runOnUiThread {
+                FloatingWidgetService.stop(this@MainActivity)
+                ScreenCaptureService.stop(this@MainActivity)
+                CaptureBuffer.clear()
+            }
+        }
+
+        @JavascriptInterface
+        fun estado(): String = JSONObject()
+            .put("flotante", FloatingWidgetService.isRunning())
+            .put("captura", ScreenCaptureService.isRunning())
+            .put("capturas", CaptureBuffer.count())
+            .toString()
+    }
+
+    // ---------- Flujo: permisos -> captura -> botón flotante ----------
+    private fun iniciarFlujo(modo: String) {
+        pendienteModo = modo
+        if (!Settings.canDrawOverlays(this)) {
+            paso = Paso.OVERLAY
+            toast("Activa «Mostrar sobre otras apps» para AI Bridge Lite y vuelve.")
+            startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName")))
             return
         }
+        pasoCaptura()
+    }
+
+    private fun pasoCaptura() {
+        val modo = pendienteModo ?: return
+        if (ScreenCaptureService.isRunning()) {
+            terminarFlujo(modo)
+            return
+        }
+        paso = Paso.CAPTURA
         val needsNotif = Build.VERSION.SDK_INT >= 33 &&
                 ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) !=
                 PackageManager.PERMISSION_GRANTED
-        if (needsNotif) notifLauncher.launch(Manifest.permission.POST_NOTIFICATIONS) else launchCapture()
+        if (needsNotif) notifLauncher.launch(Manifest.permission.POST_NOTIFICATIONS) else lanzarCaptura()
     }
 
-    private fun launchCapture() {
+    private fun lanzarCaptura() {
+        if (paso != Paso.CAPTURA) return
         val mgr = getSystemService(MediaProjectionManager::class.java)
         captureLauncher.launch(mgr.createScreenCaptureIntent())
     }
 
-    private fun toggleWidget() {
-        if (FloatingWidgetService.isRunning()) {
-            FloatingWidgetService.stop(this)
-            btnWidget.postDelayed({ refresh() }, 300)
-            return
-        }
-        if (!Settings.canDrawOverlays(this)) {
-            toast("Primero concede el permiso del paso 2")
-            return
-        }
-        FloatingWidgetService.start(this)
-        moveTaskToBack(true) // volver al entorno de desarrollo
-    }
-
-    // ---------- Estado ----------
-    private fun refresh() {
-        val provider = store.getProvider()
-        chips.forEach { (p, tv) ->
-            val on = p == provider
-            tv.setTextColor(if (on) DARK else MUTED)
-            tv.background = box(if (on) CYAN else DARK, CYAN_DIM, 1)
-        }
-        keyInput.hint = if (store.hasValidKey(provider)) "•••••••• (guardada)" else "Pega tu API Key"
-
-        val overlay = Settings.canDrawOverlays(this)
-        val capture = ScreenCaptureService.isRunning()
-        val widget = FloatingWidgetService.isRunning()
-
-        btnCapture.text = if (capture) "DETENER CAPTURA" else "ACTIVAR CAPTURA"
-        btnWidget.text = if (widget) "OCULTAR WIDGET" else "MOSTRAR WIDGET"
-
-        status.text = buildString {
-            append(if (store.hasValidKey(provider)) "✔" else "✖").append(" API Key (${provider.id})\n")
-            append(if (overlay) "✔" else "✖").append(" Permiso sobre otras apps\n")
-            append(if (capture) "✔" else "·").append(" Captura de pantalla\n")
-            append(if (widget) "✔" else "·").append(" Widget [AI]")
-            store.missingKeyMessage()?.let { append("\n\n⚠ ").append(it) }
+    private fun esperarCaptura(intentos: Int) {
+        val modo = pendienteModo ?: return
+        when {
+            ScreenCaptureService.isRunning() -> terminarFlujo(modo)
+            intentos <= 0 -> cancelarFlujo("No se pudo activar la captura.")
+            else -> webView.postDelayed({ esperarCaptura(intentos - 1) }, 300)
         }
     }
 
-    // ---------- Helpers ----------
-    private fun card(title: String) = LinearLayout(this).apply {
-        orientation = LinearLayout.VERTICAL
-        setPadding(dp(14), dp(12), dp(14), dp(14))
-        background = box(BG, CYAN_DIM, 1)
-        addView(label(title, CYAN, 12f, true).apply { setPadding(0, 0, 0, dp(10)) })
-        layoutParams = lp().apply { bottomMargin = dp(12) }
+    private fun terminarFlujo(modo: String) {
+        paso = Paso.NINGUNO
+        pendienteModo = null
+        FloatingWidgetService.start(this, modo)
+        toast("Botón AI listo: toca para capturar, mantén para volver.")
+        moveTaskToBack(true) // volver al juego o app de trabajo
     }
 
-    private fun button(text: String, accent: Int, onClick: () -> Unit) =
-        label(text, accent, 13f, true).apply {
-            gravity = Gravity.CENTER
-            minHeight = dp(48)
-            letterSpacing = 0.1f
-            background = box(DARK, accent, 2)
-            setOnClickListener { onClick() }
-            layoutParams = lp()
+    private fun cancelarFlujo(mensaje: String) {
+        paso = Paso.NINGUNO
+        pendienteModo = null
+        toast(mensaje)
+    }
+
+    // ---------- Entrega de capturas al chat ----------
+    /** Si hay capturas acumuladas y el chat está cargado, se las pasa (de 3 en 3 para no saturar). */
+    private fun entregarSiHay() {
+        if (!paginaLista || CaptureBuffer.count() == 0) return
+        val frames = CaptureBuffer.drain()
+        if (frames.isEmpty()) return
+        frames.chunked(3).forEach { grupo ->
+            val lista = grupo.joinToString(",", "[", "]") { "\"data:image/jpeg;base64,$it\"" }
+            webView.evaluateJavascript(
+                "window.AIBridgeApp&&window.AIBridgeApp.recibirCapturas($lista);", null
+            )
         }
-
-    private fun label(text: String, color: Int, size: Float, bold: Boolean) = TextView(this).apply {
-        this.text = text
-        setTextColor(color)
-        textSize = size
-        typeface = Typeface.create(Typeface.MONOSPACE, if (bold) Typeface.BOLD else Typeface.NORMAL)
     }
 
-    private fun box(fill: Int, stroke: Int, w: Int) = GradientDrawable().apply {
-        setColor(fill)
-        cornerRadius = dp(2).toFloat()
-        setStroke(dp(w), stroke)
-    }
-
-    private fun lp() = LinearLayout.LayoutParams(
-        LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT
-    )
-
-    private fun toast(msg: String) = Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
-    private fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()
+    private fun toast(msg: String) = Toast.makeText(this, msg, Toast.LENGTH_LONG).show()
 
     companion object {
-        private val CYAN = Color.parseColor("#00FFCC")
-        private val CYAN_DIM = Color.parseColor("#4400FFCC")
-        private val PINK = Color.parseColor("#FF007F")
-        private val BG = Color.parseColor("#080B14")
+        /** La app de fondo (servicio) lo envía al volver; la entrega real ocurre en onResume. */
+        const val EXTRA_ENTREGAR = "entregar_capturas"
+
+        private const val APP_URL = "https://chocogames270.github.io/bridge-lite2/"
+        private const val APP_HOST = "chocogames270.github.io"
+        private const val APP_PATH = "/bridge-lite2"
         private val DARK = Color.parseColor("#020205")
-        private val TEXT = Color.parseColor("#E0FBFC")
-        private val MUTED = Color.parseColor("#8CA3AF")
+
+        private const val ERROR_HTML =
+            "<html><body style=\"background:#020205;color:#e0fbfc;font-family:monospace;" +
+                    "display:flex;flex-direction:column;align-items:center;justify-content:center;" +
+                    "height:100vh;margin:0;text-align:center;padding:24px\">" +
+                    "<h2 style=\"color:#00ffcc\">AI BRIDGE</h2>" +
+                    "<p>No se pudo cargar la app. Revisa tu conexión.</p>" +
+                    "<p><a style=\"color:#ff007f\" href=\"https://chocogames270.github.io/bridge-lite2/\">REINTENTAR</a></p>" +
+                    "</body></html>"
     }
 }
