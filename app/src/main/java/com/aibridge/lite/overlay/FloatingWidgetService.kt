@@ -2,6 +2,8 @@ package com.aibridge.lite.overlay
 
 import android.annotation.SuppressLint
 import android.app.Service
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.graphics.Canvas
@@ -10,16 +12,27 @@ import android.graphics.Paint
 import android.graphics.PixelFormat
 import android.graphics.RectF
 import android.graphics.Typeface
+import android.graphics.drawable.GradientDrawable
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
 import android.provider.Settings
+import android.view.ContextThemeWrapper
 import android.view.Gravity
 import android.view.HapticFeedbackConstants
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewConfiguration
+import android.view.ViewGroup
 import android.view.WindowManager
+import android.webkit.JavascriptInterface
+import android.webkit.WebResourceRequest
+import android.webkit.WebSettings
+import android.webkit.WebView
+import android.webkit.WebViewClient
+import android.widget.FrameLayout
+import android.widget.LinearLayout
+import android.widget.TextView
 import android.widget.Toast
 import com.aibridge.lite.MainActivity
 import com.aibridge.lite.capture.CaptureBuffer
@@ -37,8 +50,9 @@ import kotlin.math.abs
 /**
  * Botón flotante "AI" sobre otras apps (SYSTEM_ALERT_WINDOW).
  *  - Toque rápido: captura (1 fotograma) o ráfaga (5 fotogramas) según el modo; se acumulan en memoria.
- *  - Mantener presionado: vuelve a la app en pantalla completa con las capturas listas para enviar.
+ *  - Mantener presionado: menú con CHAT MINI (chat sobre la otra app) y SALIR (IA en pantalla completa).
  *  - Arrastrar: mueve el botón (se pega al borde más cercano).
+ *  - Todo el modo se cierra si la captura se detiene o si la app se quita de recientes.
  */
 class FloatingWidgetService : Service() {
 
@@ -48,7 +62,16 @@ class FloatingWidgetService : Service() {
     private var job: Job? = null
 
     private var bubble: BubbleView? = null
-    private var hiddenByApp = false
+    private var bubbleLp: WindowManager.LayoutParams? = null
+
+    private var menu: View? = null
+    private val cerrarMenuRun = Runnable { cerrarMenu() }
+
+    private var mini: WebView? = null
+    private var miniBox: FrameLayout? = null
+    private var miniVisible = false
+    private var miniListo = false
+    private var inyectadas = 0 // cuántas capturas de la memoria ya se pasaron al chat mini
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -67,9 +90,34 @@ class FloatingWidgetService : Service() {
         intent?.getStringExtra(EXTRA_MODO)?.let {
             if (it == MODO_CAPTURA || it == MODO_MULTI) modoActual = it
         }
-        if (bubble == null) addBubble()
+        if (bubble == null) {
+            addBubble()
+            vigilarCaptura()
+        }
         bubble?.setCount(CaptureBuffer.count())
         return START_NOT_STICKY
+    }
+
+    // Se quitó la app de recientes: se cierra todo el modo captura.
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        CaptureBuffer.clear()
+        cerrarModo(false)
+        super.onTaskRemoved(rootIntent)
+    }
+
+    // Si la captura se detiene (por ejemplo desde la notificación), el botón flotante también se cierra.
+    private fun vigilarCaptura() {
+        scope.launch {
+            delay(2500)
+            while (true) {
+                if (!ScreenCaptureService.isRunning()) {
+                    toast("Captura detenida: botón AI cerrado.")
+                    stopSelf()
+                    break
+                }
+                delay(1500)
+            }
+        }
     }
 
     // ---------- Botón flotante ----------
@@ -86,11 +134,12 @@ class FloatingWidgetService : Service() {
             x = 0
             y = dp(200)
         }
-        v.contentDescription = "AI Bridge: toca para capturar, mantén presionado para volver a la app"
+        v.contentDescription = "AI Bridge: toca para capturar, mantén presionado para el menú"
         attachGestures(v, lp)
-        v.visibility = if (hiddenByApp) View.GONE else View.VISIBLE
+        v.visibility = if (miniVisible) View.GONE else View.VISIBLE
         wm.addView(v, lp)
         bubble = v
+        bubbleLp = lp
     }
 
     @SuppressLint("ClickableViewAccessibility")
@@ -107,7 +156,7 @@ class FloatingWidgetService : Service() {
         val longPress = Runnable {
             longFired = true
             v.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
-            restoreApp()
+            abrirMenu()
         }
 
         v.setOnTouchListener { _, e ->
@@ -161,6 +210,7 @@ class FloatingWidgetService : Service() {
 
     // ---------- Toque rápido: capturar ----------
     private fun onTap() {
+        cerrarMenu()
         if (job?.isActive == true) return
         if (!ScreenCaptureService.isRunning()) {
             toast("La captura no está activa. Actívala desde la app (botón AI).")
@@ -182,13 +232,238 @@ class FloatingWidgetService : Service() {
                     else listOfNotNull(ScreenCaptureService.capture())
                 if (frames.isEmpty()) toast("No se pudo capturar.") else CaptureBuffer.add(frames)
             } finally {
-                b.visibility = if (hiddenByApp) View.GONE else View.VISIBLE
+                b.visibility = if (miniVisible) View.GONE else View.VISIBLE
                 b.setBusy(false)
             }
         }
     }
 
-    // ---------- Mantener presionado: volver a la app ----------
+    // ---------- Mantener presionado: menú CHAT MINI / SALIR ----------
+    private fun abrirMenu() {
+        if (menu != null || miniVisible) return
+        val bl = bubbleLp ?: return
+        val dm = resources.displayMetrics
+        val ancho = dp(150)
+
+        val caja = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(6), dp(6), dp(6), dp(6))
+            background = GradientDrawable().apply {
+                setColor(BG)
+                cornerRadius = dp(8).toFloat()
+                setStroke(dp(1), CYAN)
+            }
+        }
+        caja.addView(opcion("CHAT MINI", CYAN) { cerrarMenu(); abrirMini() })
+        caja.addView(opcion("SALIR", PINK) { cerrarMenu(); cerrarModo(true) })
+        caja.setOnTouchListener { _, e ->
+            if (e.action == MotionEvent.ACTION_OUTSIDE) { cerrarMenu(); true } else false
+        }
+
+        val lp = WindowManager.LayoutParams(
+            ancho, WindowManager.LayoutParams.WRAP_CONTENT,
+            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH,
+            PixelFormat.TRANSLUCENT
+        ).apply {
+            gravity = Gravity.TOP or Gravity.START
+            val izquierda = bl.x + bl.width / 2 < dm.widthPixels / 2
+            x = if (izquierda) bl.x + bl.width else bl.x - ancho
+            y = bl.y
+        }
+        try {
+            wm.addView(caja, lp)
+            menu = caja
+            main.postDelayed(cerrarMenuRun, 6000)
+        } catch (_: Exception) {}
+    }
+
+    private fun opcion(texto: String, color: Int, accion: () -> Unit): TextView =
+        TextView(this).apply {
+            text = texto
+            setTextColor(color)
+            typeface = Typeface.create(Typeface.MONOSPACE, Typeface.BOLD)
+            textSize = 14f
+            letterSpacing = 0.1f
+            gravity = Gravity.CENTER
+            minHeight = dp(44)
+            setPadding(dp(8), dp(8), dp(8), dp(8))
+            background = GradientDrawable().apply {
+                setColor(Color.TRANSPARENT)
+                cornerRadius = dp(6).toFloat()
+                setStroke(dp(1), color)
+            }
+            layoutParams = LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
+            ).apply { topMargin = dp(4); bottomMargin = dp(4) }
+            setOnClickListener { accion() }
+        }
+
+    private fun cerrarMenu() {
+        main.removeCallbacks(cerrarMenuRun)
+        menu?.let { try { wm.removeView(it) } catch (_: IllegalArgumentException) {} }
+        menu = null
+    }
+
+    // ---------- Chat mini (el mismo chat, en una ventana sobre la otra app) ----------
+    @SuppressLint("SetJavaScriptEnabled")
+    private fun crearMini(): FrameLayout {
+        val wv = WebView(ContextThemeWrapper(applicationContext, android.R.style.Theme_DeviceDefault)).apply {
+            setBackgroundColor(DARK)
+            overScrollMode = View.OVER_SCROLL_NEVER
+            settings.apply {
+                javaScriptEnabled = true
+                domStorageEnabled = true
+                allowFileAccess = false
+                mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
+                setSupportZoom(false)
+                textZoom = 100
+            }
+            webViewClient = object : WebViewClient() {
+                override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
+                    val u = request.url
+                    return !(u.host == MainActivity.APP_HOST && (u.path ?: "").startsWith(MainActivity.APP_PATH))
+                }
+
+                override fun onPageFinished(view: WebView, url: String?) {
+                    miniListo = true
+                    view.evaluateJavascript(INYECTAR_JS, null)
+                    inyectarCapturas()
+                }
+            }
+            addJavascriptInterface(PuenteMini(), "AndroidMini")
+        }
+
+        val box = FrameLayout(this).apply {
+            background = GradientDrawable().apply {
+                setColor(DARK)
+                cornerRadius = dp(10).toFloat()
+                setStroke(dp(2), CYAN)
+            }
+            setPadding(dp(2), dp(2), dp(2), dp(2))
+            addView(wv, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+        }
+
+        mini = wv
+        miniBox = box
+        miniListo = false
+        inyectadas = 0
+        wv.loadUrl(MainActivity.APP_URL)
+        return box
+    }
+
+    private fun abrirMini() {
+        if (miniVisible) return
+        val box = try {
+            miniBox ?: crearMini()
+        } catch (_: Exception) {
+            toast("No se pudo abrir el chat mini.")
+            return
+        }
+        val dm = resources.displayMetrics
+        val lp = WindowManager.LayoutParams(
+            (dm.widthPixels * 0.94f).toInt(),
+            (dm.heightPixels * 0.52f).toInt(),
+            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+            WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED,
+            PixelFormat.TRANSLUCENT
+        ).apply {
+            gravity = Gravity.TOP or Gravity.CENTER_HORIZONTAL
+            y = dp(8)
+            softInputMode = WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE
+        }
+        try {
+            wm.addView(box, lp)
+        } catch (_: Exception) {
+            toast("No se pudo abrir el chat mini.")
+            return
+        }
+        miniVisible = true
+        miniUsado = true
+        bubble?.visibility = View.GONE
+        mini?.onResume()
+        inyectarCapturas()
+    }
+
+    private fun minimizarMini() {
+        val box = miniBox
+        if (box != null && miniVisible) {
+            try { wm.removeView(box) } catch (_: IllegalArgumentException) {}
+        }
+        miniVisible = false
+        mini?.onPause()
+        bubble?.visibility = View.VISIBLE
+    }
+
+    private fun destruirMini() {
+        val box = miniBox
+        if (box != null && miniVisible) {
+            try { wm.removeView(box) } catch (_: IllegalArgumentException) {}
+        }
+        miniVisible = false
+        mini?.let {
+            (it.parent as? ViewGroup)?.removeView(it)
+            it.destroy()
+        }
+        mini = null
+        miniBox = null
+        miniListo = false
+    }
+
+    /** Pasa al chat mini las capturas nuevas (copias; la memoria se vacía solo cuando se envían). */
+    private fun inyectarCapturas() {
+        val wv = mini ?: return
+        if (!miniListo) return
+        val todas = CaptureBuffer.snapshot()
+        if (inyectadas > todas.size) inyectadas = 0
+        val nuevas = todas.drop(inyectadas)
+        if (nuevas.isEmpty()) return
+        inyectadas = todas.size
+        nuevas.chunked(3).forEach { grupo ->
+            val lista = grupo.joinToString(",", "[", "]") { "\"data:image/jpeg;base64,$it\"" }
+            wv.evaluateJavascript("window.AIBridgeApp&&window.AIBridgeApp.recibirCapturas($lista);", null)
+        }
+    }
+
+    private inner class PuenteMini {
+        @JavascriptInterface
+        fun copiar(texto: String) {
+            main.post { copiarPortapapeles(texto) }
+        }
+
+        @JavascriptInterface
+        fun minimizar() {
+            main.post { minimizarMini() }
+        }
+
+        @JavascriptInterface
+        fun salir() {
+            main.post { cerrarModo(true) }
+        }
+
+        // El chat mini ya envió (o quitó) todas las capturas: se vacía la memoria.
+        @JavascriptInterface
+        fun enviadas() {
+            main.post {
+                CaptureBuffer.clear()
+                inyectadas = 0
+            }
+        }
+    }
+
+    private fun copiarPortapapeles(t: String) {
+        val cm = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+        cm.setPrimaryClip(ClipData.newPlainText("AI Bridge Lite", t))
+    }
+
+    // ---------- Salir del modo captura (y abrir la IA en pantalla completa) ----------
+    private fun cerrarModo(abrirApp: Boolean) {
+        cerrarMenu()
+        if (abrirApp) restoreApp()
+        ScreenCaptureService.stop(this)
+        stopSelf()
+    }
+
     private fun restoreApp() {
         val i = Intent(this, MainActivity::class.java)
             .addFlags(
@@ -204,28 +479,25 @@ class FloatingWidgetService : Service() {
         }
     }
 
-    /** La app lo llama al entrar (ocultar) y al salir (mostrar) para que el botón no tape el chat. */
-    private fun applyHidden(hidden: Boolean) {
-        hiddenByApp = hidden
-        bubble?.visibility = if (hidden) View.GONE else View.VISIBLE
-    }
-
     private fun toast(msg: String) = Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
     private fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()
 
-    // ---------- Limpieza (sin memory leaks) ----------
+    // ---------- Limpieza ----------
     override fun onDestroy() {
         ref = null
         CaptureBuffer.listener = null
         main.removeCallbacksAndMessages(null)
         job?.cancel()
         scope.cancel()
+        cerrarMenu()
+        destruirMini()
         bubble?.let { try { wm.removeView(it) } catch (_: IllegalArgumentException) {} }
         bubble = null
+        ScreenCaptureService.stop(this)
         super.onDestroy()
     }
 
-    // ---------- Dibujo del botón "AI" (sin mascota) ----------
+    // ---------- Dibujo del botón "AI" ----------
     private class BubbleView(context: Context) : View(context) {
         private val d = resources.displayMetrics.density
         private var count = 0
@@ -289,6 +561,11 @@ class FloatingWidgetService : Service() {
         const val MODO_MULTI = "multi"
         private const val EXTRA_MODO = "modo"
 
+        // Carga js/mini.js dentro de la ventana del chat mini.
+        private const val INYECTAR_JS =
+            "(function(){if(window.__aiblMini)return;var s=document.createElement('script');" +
+                    "s.src='js/mini.js?v=1';document.body.appendChild(s);})();"
+
         private val CYAN = Color.parseColor("#00FFCC")
         private val PINK = Color.parseColor("#FF007F")
         private val BG = Color.parseColor("#080B14")
@@ -299,6 +576,10 @@ class FloatingWidgetService : Service() {
 
         @Volatile
         private var ref: WeakReference<FloatingWidgetService>? = null
+
+        /** true si se usó el chat mini: la app principal recarga el chat para leer lo que se escribió ahí. */
+        @Volatile
+        var miniUsado = false
 
         fun isRunning(): Boolean = ref?.get() != null
 
@@ -311,11 +592,6 @@ class FloatingWidgetService : Service() {
 
         fun stop(context: Context) {
             context.stopService(Intent(context, FloatingWidgetService::class.java))
-        }
-
-        /** Llamar desde el hilo principal (ciclo de vida de la Activity). */
-        fun setHiddenByApp(hidden: Boolean) {
-            ref?.get()?.applyHidden(hidden)
         }
     }
 }
