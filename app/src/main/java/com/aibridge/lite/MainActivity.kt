@@ -40,7 +40,8 @@ import org.json.JSONObject
  * Contenedor nativo del chat (WebView en pantalla completa).
  *  - El chat llama a AndroidBridge.iniciarFlotante(modo): se piden los permisos, se activa la captura,
  *    aparece el botón flotante "AI" y la app se minimiza.
- *  - Al volver a la app (mantener presionado el botón), las capturas acumuladas se entregan al chat.
+ *  - Al abrir la app en pantalla completa, el modo captura se cierra y las capturas sin enviar
+ *    se entregan al chat.
  */
 class MainActivity : ComponentActivity() {
 
@@ -130,7 +131,22 @@ class MainActivity : ComponentActivity() {
 
     override fun onStart() {
         super.onStart()
-        FloatingWidgetService.setHiddenByApp(true) // el botón flotante no tapa el chat
+
+        // Al abrir la app en pantalla completa se cierra el modo captura
+        // (las capturas sin enviar se conservan y se entregan al chat).
+        if (paso == Paso.NINGUNO &&
+            (FloatingWidgetService.isRunning() || ScreenCaptureService.isRunning())
+        ) {
+            FloatingWidgetService.stop(this)
+            ScreenCaptureService.stop(this)
+        }
+
+        // Si se usó el chat mini, se recarga para leer lo que se escribió allí.
+        if (FloatingWidgetService.miniUsado) {
+            FloatingWidgetService.miniUsado = false
+            paginaLista = false
+            webView.reload()
+        }
     }
 
     override fun onResume() {
@@ -146,11 +162,6 @@ class MainActivity : ComponentActivity() {
     override fun onPause() {
         webView.onPause()
         super.onPause()
-    }
-
-    override fun onStop() {
-        FloatingWidgetService.setHiddenByApp(false)
-        super.onStop()
     }
 
     override fun onDestroy() {
@@ -313,7 +324,7 @@ class MainActivity : ComponentActivity() {
         paso = Paso.NINGUNO
         pendienteModo = null
         FloatingWidgetService.start(this, modo)
-        toast("Botón AI listo: toca para capturar, mantén para volver.")
+        toast("Botón AI listo: toca para capturar, mantén presionado para el menú.")
         moveTaskToBack(true) // volver al juego o app de trabajo
     }
 
@@ -343,9 +354,9 @@ class MainActivity : ComponentActivity() {
         /** La app de fondo (servicio) lo envía al volver; la entrega real ocurre en onResume. */
         const val EXTRA_ENTREGAR = "entregar_capturas"
 
-        private const val APP_URL = "https://chocogames270.github.io/bridge-lite2/"
-        private const val APP_HOST = "chocogames270.github.io"
-        private const val APP_PATH = "/bridge-lite2"
+        const val APP_URL = "https://chocogames270.github.io/bridge-lite2/"
+        const val APP_HOST = "chocogames270.github.io"
+        const val APP_PATH = "/bridge-lite2"
         private val DARK = Color.parseColor("#020205")
 
         private const val ERROR_HTML =
