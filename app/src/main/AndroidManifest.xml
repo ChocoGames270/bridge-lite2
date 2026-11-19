@@ -9,12 +9,14 @@
 
     <application
         android:allowBackup="false"
+        android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher"
         android:label="AI Bridge Lite"
         android:theme="@android:style/Theme.Material.NoActionBar"
         android:usesCleartextTraffic="false">
 
-        <!-- singleTask: al mantener presionado el botón flotante, la app vuelve al frente
-             sin crear otra ventana. configChanges: rotar o abrir el teclado no recarga el chat. -->
+        <!-- singleTask: al abrir la app desde el botón flotante vuelve al frente sin duplicarse.
+             configChanges: rotar o abrir el teclado no recarga el chat. -->
         <activity
             android:name=".MainActivity"
             android:exported="true"
@@ -28,14 +30,17 @@
             </intent-filter>
         </activity>
 
+        <!-- stopWithTask: si quitas la app de recientes, la captura y el botón flotante se cierran. -->
         <service
             android:name=".capture.ScreenCaptureService"
             android:exported="false"
-            android:foregroundServiceType="mediaProjection" />
+            android:foregroundServiceType="mediaProjection"
+            android:stopWithTask="true" />
 
         <service
             android:name=".overlay.FloatingWidgetService"
-            android:exported="false" />
+            android:exported="false"
+            android:stopWithTask="true" />
 
     </application>
 </manifest>
