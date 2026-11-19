@@ -2,7 +2,7 @@ package com.aibridge.lite.capture
 
 /**
  * Memoria temporal de capturas (JPEG en Base64, sin prefijo "data:").
- * Se llena con los toques al botón flotante y se vacía al entregar al chat.
+ * Se llena con los toques al botón flotante y se vacía al enviarlas o al entregarlas al chat.
  */
 object CaptureBuffer {
 
@@ -17,6 +17,9 @@ object CaptureBuffer {
     fun count(): Int = synchronized(this) { items.size }
 
     fun isFull(): Boolean = count() >= MAX
+
+    /** Copia de lo acumulado, sin vaciar la memoria. */
+    fun snapshot(): List<String> = synchronized(this) { ArrayList(items) }
 
     /** Agrega hasta llenar el máximo. Devuelve cuántas se guardaron. */
     fun add(frames: List<String>): Int {
