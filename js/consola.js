@@ -4,8 +4,7 @@
   "use strict";
 
   const ob = global.AIBridgeOnboarding;
-  const $ = (id) => document.getElementById(id);
-  const $$ = (sel) => Array.from(document.querySelectorAll(sel));
+  const $ = (id) => document.getElementById(id); const $$ = (sel) => Array.from(document.querySelectorAll(sel));
 
   if (!ob) {
     document.body.textContent = "No se pudo cargar js/onboarding.js. Revisa que el archivo exista.";
@@ -138,18 +137,7 @@
   function cerrarPanel() {
     $("panel").classList.remove("abierto");
     $("velo").classList.remove("abierto");
-    $("panel").setAttribute("aria-hidden", "true");
-  }
-
-  /* ============ INSTALAR (PWA) ============ */
-  const esStandalone = () =>
-    (global.matchMedia && global.matchMedia("(display-mode: standalone)").matches) ||
-    global.navigator.standalone === true;
-  const esIOS = () => /iphone|ipad|ipod/i.test(global.navigator.userAgent);
-
-  function renderInstalar() {
-    const mostrar = !esStandalone() && (!!instalador || esIOS());
-    $$(".js-instalar").forEach((b) => { b.hidden = !mostrar; });
+    $("panel").setAttribute("aria-hidden", "true"); }    /* ============ INSTALAR (PWA) ============ */ const esStandalone = () => (global.matchMedia && global.matchMedia("(display-mode: standalone)").matches) \vert{}\vert{} global.navigator.standalone === true; const esIOS = () => /iphone\vert{}ipad\vert{}ipod/i.test(global.navigator.userAgent);    function renderInstalar() { const mostrar = !esStandalone() && (!!instalador \vert{}\vert{} esIOS()); $$(".js-instalar").forEach((b) => { b.hidden = !mostrar; });
   }
 
   async function instalar() {
@@ -183,15 +171,7 @@
     const prov = ob.getConfig().proveedor_activo;
     const modelo = ob.getModeloId(prov);
     const key = ob.tieneKey(prov);
-    const el = $("chip-estado");
-    el.textContent = `${NOMBRES[prov]} · ${modelo || "sin modelo"} · ${key ? "key lista" : "sin API Key"}`;
-    el.className = "chip-estado " + (key && modelo ? "ok" : "alerta");
-  }
-
-  /* ============ ENFOQUES Y ATAJOS ============ */
-  function renderEnfoques() {
-    const e = ob.getEnfoque();
-    $$("[data-enfoque]").forEach((c) => c.classList.toggle("active", c.dataset.enfoque === e));
+    const el = $("chip-estado"); el.textContent = `${NOMBRES[prov]} · ${modelo \vert{}\vert{} "sin modelo"} · ${key ? "key lista" : "sin API Key"}`; el.className = "chip-estado " + (key && modelo ? "ok" : "alerta"); }    /* ============ ENFOQUES Y ATAJOS ============ */ function renderEnfoques() { const e = ob.getEnfoque(); $$("[data-enfoque]").forEach((c) => c.classList.toggle("active", c.dataset.enfoque === e));
   }
 
   function usarAtajo(id) {
@@ -227,8 +207,7 @@
     const prov = cfg.proveedor_activo;
 
     $("cfg-idioma").value = cfg.idioma;
-    $("cfg-extra").value = cfg.extra;
-    $$(".chip[data-proveedor]").forEach((c) => c.classList.toggle("active", c.dataset.proveedor === prov));
+    $("cfg-extra").value = cfg.extra; $$(".chip[data-proveedor]").forEach((c) => c.classList.toggle("active", c.dataset.proveedor === prov));
 
     const sel = $("cfg-modelo");
     sel.textContent = "";
@@ -296,8 +275,7 @@
     $("modal-ajustes").addEventListener("click", (e) => { if (e.target === $("modal-ajustes")) cerrarAjustes(); });
 
     $("cfg-idioma").addEventListener("change", (e) => ob.setIdioma(e.target.value));
-    $("cfg-extra").addEventListener("input", (e) => ob.setExtra(e.target.value));
-    $$(".chip[data-proveedor]").forEach((c) =>
+    $("cfg-extra").addEventListener("input", (e) => ob.setExtra(e.target.value)); $$(".chip[data-proveedor]").forEach((c) =>
       c.addEventListener("click", () => { ob.setProveedorActivo(c.dataset.proveedor); renderAjustes(); renderEstado(); }));
 
     $("cfg-modelo").addEventListener("change", (e) => {
@@ -1159,18 +1137,27 @@
       else { cerrarMenus(); cerrarPanel(); }
     });
 
-    // Mantiene la barra de entrada sobre el teclado (también en iPhone).
+    // Mantiene la barra de entrada dentro del alto visible (también en iPhone).
     if (global.visualViewport) {
-      const ajustar = () => {
-        $("app").style.height = global.visualViewport.height + "px";
-        global.scrollTo(0, 0);
-      };
-      global.visualViewport.addEventListener("resize", ajustar);
-      global.visualViewport.addEventListener("scroll", ajustar);
+      global.visualViewport.addEventListener("resize", ajustarAlto);
+      global.visualViewport.addEventListener("scroll", ajustarAlto);
     }
+    global.addEventListener("resize", ajustarAlto);
+    global.addEventListener("orientationchange", ajustarAlto);
+    global.addEventListener("pageshow", ajustarAlto);
+    global.addEventListener("load", ajustarAlto);
   }
 
   /* ============ INICIO ============ */
+  function ajustarAlto() {
+    const vv = global.visualViewport;
+    const h = Math.round(vv && vv.height ? vv.height : global.innerHeight);
+    if (h > 0 && $("app")) $("app").style.height = h + "px";
+    global.scrollTo(0, 0);
+  }
+  ajustarAlto();
+  requestAnimationFrame(ajustarAlto);
+
   enlazarAjustes();
   enlazarChat();
   renderEnfoques();
