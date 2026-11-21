@@ -1,37 +1,59 @@
-/* AI Bridge Lite - Configuración, cuota, planes y chats (Repo 2)
+/* AI Bridge Lite - Configuración, enfoques, prompt base y chats
    Todo vive en localStorage (con respaldo en memoria). Expone window.AIBridgeOnboarding. */
 (function (global) {
   "use strict";
 
-  const KEY = "aibl_config_v1";
+  const KEY = "aibl_config_v1";        // misma clave: conserva las API Keys ya guardadas
   const KEY_CHATS = "aibl_chats_v1";
   const MIN_KEY = 10;
   const OTRO = "__otro__";
 
-  // Límites (sin tope rígido de 5 imágenes; ajusta MAX_IMAGENES si algún proveedor se queja)
   const MAX_IMAGENES = 40;
   const MAX_PROMPT = 8000;
   const MAX_SNIPPET = 20000;
   const MAX_ARCHIVOS_TXT = 60000;
+  const MAX_EXTRA = 600;
   const MAX_HISTORIAL = 12;
   const MAX_CHATS = 60;
   const MAX_MENSAJES = 200;
   const TITULO_NUEVO = "Chat nuevo";
 
   const IDIOMAS = ["es", "en", "pt"];
-  const AREAS = ["scripts", "3d", "vfx", "aprendiz"];
+  const IDIOMA_IA = { es: "español", en: "inglés", pt: "portugués" };
   const PROVEEDORES = ["gemini", "claude", "openai"];
-  const PERFILES = ["visual", "script", "hibrido", "optimizacion"];
-  const MODOS = ["nativa", "byok"];
-  const MODOS_CAPTURA = ["captura", "multi"];
+  const NOMBRES = { gemini: "Gemini", claude: "Claude", openai: "OpenAI" };
+  const ENFOQUES = ["mecanicas", "balanceo", "lore", "retos"];
   const TIPOS_ADJ = ["imagen", "archivo", "codigo"];
 
-  // Planes: estructura lista. Los valores son ajustables aquí.
-  // OJO: el desbloqueo real de un plan debe verificarse en tu servidor (aquí solo es local).
-  const PLANES = {
-    gratis: { nombre: "Gratis", mensajes_semana: 60, imagenes_por_mensaje: 3, multimedia: false },
-    aporte: { nombre: "Aportación", mensajes_semana: 250, imagenes_por_mensaje: 10, multimedia: true },
-    pro: { nombre: "Pro", mensajes_semana: 1000, imagenes_por_mensaje: 40, multimedia: true }
+  /* ================= CONCIENCIA BASE (System Prompt) ================= */
+  const BASE =
+    "Eres AI Bridge Lite, un copiloto para gamers y creadores de videojuegos. " +
+    "Ayudas con partidas, estrategias, diseño de juegos, mecánicas, balanceo, lore e ítems. " +
+    "Sé claro, creativo y conciso; da pasos y ejemplos concretos. " +
+    "Si faltan datos, haz suposiciones razonables y dilas en una línea. " +
+    "Si el usuario comparte código, capturas o archivos, úsalos. " +
+    "Entrega el código dentro de bloques ``` indicando el lenguaje.";
+
+  const ENFOQUE_TXT = {
+    mecanicas:
+      "Enfoque: Mecánicas y Sistemas. Estructura las ideas como: objetivo, reglas, entradas y salidas, " +
+      "bucle de juego, casos límite y riesgos de abuso. Usa listas cortas.",
+    balanceo:
+      "Enfoque: Balanceo y Progresión. Propón tablas de stats, costos, curvas de progresión y fórmulas " +
+      "con números concretos; explica cómo probar y ajustar el balance.",
+    lore:
+      "Enfoque: Lore, Ítems y Mundo. Crea nombres, ítems con descripción y efecto, facciones, lugares " +
+      "y trasfondo coherentes con el tono del juego.",
+    retos:
+      "Enfoque: Retos e Ideas Gamer. Genera retos, modos de partida y desafíos con reglas simples, " +
+      "dificultad y recompensa."
+  };
+
+  const ENFOQUE_NOMBRE = {
+    mecanicas: "Mecánicas y Sistemas",
+    balanceo: "Balanceo y Progresión",
+    lore: "Lore, Ítems y Mundo",
+    retos: "Retos / Ideas Gamer"
   };
 
   // Revisa estos nombres en la consola de cada proveedor; si alguno falla, usa "Otro".
@@ -67,30 +89,14 @@
     return o;
   };
 
-  // Lunes (00:00 local) de la semana de la fecha dada.
-  function lunesActual() {
-    const d = new Date();
-    d.setHours(0, 0, 0, 0);
-    d.setDate(d.getDate() - ((d.getDay() + 6) % 7));
-    return d;
-  }
-  const aISO = (d) =>
-    d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
-
   /* ================= CONFIGURACIÓN ================= */
   const DEFAULT = {
-    version: "1.1",
+    version: "2.0",
     completado: false,
     idioma: "es",
-    areas: [],
+    enfoque: "mecanicas",
+    extra: "",
     proveedor_activo: "gemini",
-    perfil: "hibrido",
-    modo: "nativa",              // "nativa" (IA propia con límite semanal) | "byok" (API Key propia)
-    modo_captura: "captura",     // "captura" (toma única) | "multi" (ráfaga)
-    plan: "gratis",
-    aportes_usd: 0,
-    uso: { semana: "", mensajes: 0 },
-    cuenta: null,                // { nombre, email, foto } de Google (sin tokens)
     api_keys: porProveedor(() => ""),
     modelos: porProveedor((p) => MODELOS[p][0].id),
     modelos_custom: porProveedor(() => "")
@@ -103,10 +109,9 @@
 
     cfg.completado = data.completado === true;
     if (IDIOMAS.includes(data.idioma)) cfg.idioma = data.idioma;
-    if (Array.isArray(data.areas)) cfg.areas = data.areas.filter((a, i, arr) => AREAS.includes(a) && arr.indexOf(a) === i);
+    if (ENFOQUES.includes(data.enfoque)) cfg.enfoque = data.enfoque;
+    cfg.extra = texto(data.extra).slice(0, MAX_EXTRA);
     if (PROVEEDORES.includes(data.proveedor_activo)) cfg.proveedor_activo = data.proveedor_activo;
-    if (PERFILES.includes(data.perfil)) cfg.perfil = data.perfil;
-    if (MODOS_CAPTURA.includes(data.modo_captura)) cfg.modo_captura = data.modo_captura;
 
     PROVEEDORES.forEach((p) => {
       cfg.api_keys[p] = texto(data.api_keys && data.api_keys[p]).trim();
@@ -115,26 +120,6 @@
       const valido = sel === OTRO || MODELOS[p].some((m) => m.id === sel);
       cfg.modelos[p] = valido ? sel : DEFAULT.modelos[p];
     });
-
-    // Si ya tenía una key guardada (versión anterior), conserva el modo BYOK.
-    const hayKey = PROVEEDORES.some((p) => cfg.api_keys[p].length >= MIN_KEY);
-    cfg.modo = MODOS.includes(data.modo) ? data.modo : (hayKey ? "byok" : "nativa");
-
-    cfg.plan = PLANES[data.plan] ? data.plan : "gratis";
-    cfg.aportes_usd = Number.isFinite(data.aportes_usd) ? Math.min(100, Math.max(0, data.aportes_usd)) : 0;
-
-    if (data.uso && typeof data.uso === "object") {
-      cfg.uso.semana = texto(data.uso.semana).slice(0, 10);
-      cfg.uso.mensajes = Number.isInteger(data.uso.mensajes) && data.uso.mensajes >= 0 ? data.uso.mensajes : 0;
-    }
-
-    const c = data.cuenta;
-    if (c && typeof c === "object") {
-      const nombre = texto(c.nombre).slice(0, 80);
-      const email = texto(c.email).slice(0, 120);
-      const foto = texto(c.foto).startsWith("https://") ? texto(c.foto).slice(0, 500) : "";
-      if (nombre || email) cfg.cuenta = { nombre, email, foto };
-    }
     return cfg;
   }
 
@@ -160,17 +145,6 @@
       return false; // la app sigue funcionando en memoria hasta cerrar la pestaña
     }
   }
-
-  // Reinicia el contador al empezar una semana nueva (lunes).
-  function rotarSemana() {
-    const hoy = aISO(lunesActual());
-    if (cfg.uso.semana !== hoy) {
-      cfg.uso.semana = hoy;
-      cfg.uso.mensajes = 0;
-      guardar();
-    }
-  }
-  rotarSemana();
 
   // Quita espacios, saltos de línea y comillas que se cuelan al copiar/pegar.
   const limpiarKey = (v) => texto(v).replace(/\s+/g, "").replace(/^["']+|["']+$/g, "");
@@ -288,43 +262,54 @@
 
   /* ================= API PÚBLICA ================= */
   const API = {
-    MIN_KEY, OTRO, IDIOMAS, AREAS, PROVEEDORES, PERFILES, MODOS, MODOS_CAPTURA,
-    MAX_IMAGENES, MAX_PROMPT, MAX_SNIPPET, TITULO_NUEVO,
+    MIN_KEY, OTRO, IDIOMAS, PROVEEDORES, NOMBRES, ENFOQUES, ENFOQUE_NOMBRE,
+    MAX_IMAGENES, MAX_PROMPT, MAX_SNIPPET, MAX_EXTRA, TITULO_NUEVO,
 
     getConfig: () => clone(cfg),
     isDone: () => cfg.completado === true,
     setCompletado(v) { cfg.completado = v === true; return guardar(); },
 
-    // ----- Idioma, áreas y perfil -----
+    // ----- Idioma, enfoque e instrucciones extra -----
     setIdioma(id) {
       if (!IDIOMAS.includes(id)) return false;
       cfg.idioma = id;
       return guardar();
     },
-    toggleArea(area) {
-      if (!AREAS.includes(area)) return false;
-      const i = cfg.areas.indexOf(area);
-      if (i === -1) cfg.areas.push(area); else cfg.areas.splice(i, 1);
+    getEnfoque: () => cfg.enfoque,
+    setEnfoque(e) {
+      if (!ENFOQUES.includes(e)) return false;
+      cfg.enfoque = e;
       return guardar();
     },
-    setPerfil(p) {
-      if (!PERFILES.includes(p)) return false;
-      cfg.perfil = p;
+    getExtra: () => cfg.extra,
+    setExtra(t) {
+      cfg.extra = texto(t).slice(0, MAX_EXTRA);
       return guardar();
     },
 
-    // ----- Motor (IA nativa / BYOK) y modo de captura del botón "AI" -----
-    getModo: () => cfg.modo,
-    setModo(m) {
-      if (!MODOS.includes(m)) return false;
-      cfg.modo = m;
-      return guardar();
+    // System Prompt final: conciencia base + enfoque + idioma + extra del usuario.
+    buildSystem() {
+      let s = BASE + " " + ENFOQUE_TXT[cfg.enfoque];
+      s += ` Responde en ${IDIOMA_IA[cfg.idioma] || "español"}.`;
+      const extra = cfg.extra.trim();
+      if (extra) s += ` Contexto del usuario: ${extra}`;
+      return s;
     },
-    getModoCaptura: () => cfg.modo_captura,
-    setModoCaptura(m) {
-      if (!MODOS_CAPTURA.includes(m)) return false;
-      cfg.modo_captura = m;
-      return guardar();
+
+    // Resumen de la configuración para copiar (NUNCA incluye la API Key).
+    configATexto() {
+      const p = cfg.proveedor_activo;
+      return [
+        "AI Bridge Lite · configuración",
+        "Proveedor: " + NOMBRES[p],
+        "Modelo: " + (API.getModeloId(p) || "sin modelo"),
+        "Enfoque: " + ENFOQUE_NOMBRE[cfg.enfoque],
+        "Idioma: " + (IDIOMA_IA[cfg.idioma] || "español"),
+        "Instrucciones extra: " + (cfg.extra.trim() || "ninguna"),
+        "",
+        "System Prompt:",
+        API.buildSystem()
+      ].join("\n");
     },
 
     // ----- Proveedor y modelo -----
@@ -353,7 +338,7 @@
       return cfg.modelos[p] === OTRO ? cfg.modelos_custom[p] : cfg.modelos[p];
     },
 
-    // ----- API Keys (BYOK) -----
+    // ----- API Keys (solo en este navegador) -----
     setKey(p, valor) {
       if (!provValido(p)) return false;
       cfg.api_keys[p] = limpiarKey(valor);
@@ -365,69 +350,14 @@
       return provValido(prov) && cfg.api_keys[prov].length >= MIN_KEY;
     },
 
-    // ----- Planes, aportes y cuota semanal de la IA nativa -----
-    listarPlanes: () => clone(PLANES),
-    getPlan() {
-      return Object.assign({ id: cfg.plan, aportes_usd: cfg.aportes_usd }, PLANES[cfg.plan]);
-    },
-    // Estructura lista; el desbloqueo real debe confirmarlo tu servidor.
-    setPlan(id, aportesUsd) {
-      if (!PLANES[id]) return false;
-      cfg.plan = id;
-      if (Number.isFinite(aportesUsd)) cfg.aportes_usd = Math.min(100, Math.max(0, aportesUsd));
-      return guardar();
-    },
-    usoSemanal() {
-      rotarSemana();
-      const limite = PLANES[cfg.plan].mensajes_semana;
-      const usados = cfg.uso.mensajes;
-      const sig = lunesActual();
-      sig.setDate(sig.getDate() + 7);
-      return {
-        plan: cfg.plan,
-        usados,
-        limite,
-        restantes: Math.max(0, limite - usados),
-        porcentaje: Math.min(100, Math.round((usados / limite) * 100)),
-        reinicia: aISO(sig)
-      };
-    },
-    puedeUsarNativa: () => API.usoSemanal().restantes > 0,
-    registrarUsoNativa(n) {
-      rotarSemana();
-      cfg.uso.mensajes += n > 0 ? Math.floor(n) : 1;
-      return guardar();
-    },
-    // Si la petición falla, devuelve el mensaje descontado.
-    devolverUsoNativa(n) {
-      cfg.uso.mensajes = Math.max(0, cfg.uso.mensajes - (n > 0 ? Math.floor(n) : 1));
-      return guardar();
-    },
-    // Máximo de imágenes por mensaje según el motor activo.
-    limiteImagenes() {
-      return cfg.modo === "byok" ? MAX_IMAGENES : Math.min(MAX_IMAGENES, PLANES[cfg.plan].imagenes_por_mensaje);
-    },
+    limiteImagenes: () => MAX_IMAGENES,
 
-    // { ok:true } o { ok:false, motivo:"limite" | "sin_key" | "sin_modelo" }
+    // { ok:true } o { ok:false, motivo:"sin_key" | "sin_modelo" }
     listoParaEnviar() {
-      if (cfg.modo === "nativa") return API.puedeUsarNativa() ? { ok: true } : { ok: false, motivo: "limite" };
       const p = cfg.proveedor_activo;
       if (!API.tieneKey(p)) return { ok: false, motivo: "sin_key" };
       if (!API.getModeloId(p)) return { ok: false, motivo: "sin_modelo" };
       return { ok: true };
-    },
-
-    // ----- Cuenta de Google (solo datos de perfil, nunca tokens) -----
-    getCuenta: () => (cfg.cuenta ? clone(cfg.cuenta) : null),
-    setCuenta(datos) {
-      const c = normalizar({ cuenta: datos }).cuenta;
-      if (!c) return false;
-      cfg.cuenta = c;
-      return guardar();
-    },
-    cerrarSesion() {
-      cfg.cuenta = null;
-      return guardar();
     },
 
     /* ----- Chats ----- */
@@ -526,7 +456,7 @@
       d.activo = null;
       return guardarChats();
     },
-    // Texto plano del chat para compartir.
+    // Texto plano del chat para copiar o compartir.
     chatATexto(id) {
       const c = buscarChat(id);
       if (!c) return "";
@@ -542,7 +472,6 @@
       try { global.localStorage.removeItem(KEY); } catch (_) {}
       memoria = null;
       cfg = normalizar(null);
-      rotarSemana();
     },
     // Borra configuración, keys y todos los chats.
     resetTodo() {
@@ -552,25 +481,21 @@
       chatsData = normalizarChats(null);
     },
 
-    /* Payload según el motor activo. Devuelve null si no está listo para enviar
-       (usa listoParaEnviar() para conocer el motivo).
-       datos: { perfil_seleccionado, prompt_intencion, script_snippet, archivos:[{nombre,texto}],
-                objeto_properties, modo_secuencia_frames:[base64], historial:[{rol,texto}] } */
+    /* Payload para la IA. Devuelve null si no está listo (usa listoParaEnviar() para el motivo).
+       datos: { prompt_intencion, script_snippet, archivos:[{nombre,texto}],
+                imagenes:[base64], historial:[{rol,texto}] } */
     buildPayload(datos) {
       const d = datos || {};
       if (!API.listoParaEnviar().ok) return null;
 
-      const nativa = cfg.modo === "nativa";
       const prov = cfg.proveedor_activo;
-
       const p = {
-        version: "1.1",
-        modo: cfg.modo,
-        proveedor: nativa ? "nativa" : prov,
-        perfil_seleccionado: PERFILES.includes(d.perfil_seleccionado) ? d.perfil_seleccionado : cfg.perfil,
-        prompt_intencion: texto(d.prompt_intencion).slice(0, MAX_PROMPT)
+        version: "2.0",
+        proveedor: prov,
+        enfoque: cfg.enfoque,
+        prompt_intencion: texto(d.prompt_intencion).slice(0, MAX_PROMPT),
+        api_key_usuario: cfg.api_keys[prov]
       };
-      if (!nativa) p.api_key_usuario = cfg.api_keys[prov];
 
       const snippet = texto(d.script_snippet);
       if (snippet) p.script_snippet = snippet.slice(0, MAX_SNIPPET);
@@ -589,11 +514,8 @@
         if (lista.length) p.archivos = lista;
       }
 
-      if (d.objeto_properties && typeof d.objeto_properties === "object") {
-        p.objeto_properties = d.objeto_properties;
-      }
-      if (Array.isArray(d.modo_secuencia_frames) && d.modo_secuencia_frames.length) {
-        p.modo_secuencia_frames = d.modo_secuencia_frames.slice(0, API.limiteImagenes());
+      if (Array.isArray(d.imagenes) && d.imagenes.length) {
+        p.imagenes = d.imagenes.slice(0, MAX_IMAGENES);
       }
       if (Array.isArray(d.historial) && d.historial.length) {
         p.historial = d.historial
