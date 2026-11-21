@@ -3,7 +3,7 @@
    Sube CACHE_VERSION cada vez que cambies archivos de la web. */
 "use strict";
 
-const CACHE_VERSION = "v4";
+const CACHE_VERSION = "v5";
 const CACHE_NAME = "aibl-cache-" + CACHE_VERSION;
 
 const ARCHIVOS = [
@@ -19,6 +19,7 @@ const ARCHIVOS = [
 
 const aUrl = (ruta) => new URL(ruta, self.registration.scope).href;
 
+// Instalación: guarda cada archivo por separado (si uno falta, no se cae todo).
 self.addEventListener("install", (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) =>
@@ -33,6 +34,7 @@ self.addEventListener("install", (event) => {
   );
 });
 
+// Activación: borra cachés de versiones anteriores y toma el control.
 self.addEventListener("activate", (event) => {
   event.waitUntil(
     caches.keys()
@@ -47,6 +49,7 @@ self.addEventListener("activate", (event) => {
   );
 });
 
+// Peticiones: caché primero y actualiza de fondo.
 // Solo archivos propios (GET). Las llamadas a las APIs de IA NUNCA se tocan.
 self.addEventListener("fetch", (event) => {
   const req = event.request;
@@ -70,7 +73,7 @@ self.addEventListener("fetch", (event) => {
           if (req.mode === "navigate") return caches.match(aUrl("index.html"));
           return Response.error();
         });
-      return hit || red;
+      return hit ? hit : red;
     })
   );
 });
