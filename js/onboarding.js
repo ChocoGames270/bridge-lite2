@@ -18,12 +18,16 @@
   const MAX_MENSAJES = 200;
   const TITULO_NUEVO = "Chat nuevo";
 
+  const F = "\x60\x60\x60"; // tres comillas invertidas (bloque de código)
+
   const IDIOMAS = ["es", "en", "pt"];
   const IDIOMA_IA = { es: "español", en: "inglés", pt: "portugués" };
   const PROVEEDORES = ["gemini", "claude", "openai"];
   const NOMBRES = { gemini: "Gemini", claude: "Claude", openai: "OpenAI" };
   const ENFOQUES = ["mecanicas", "balanceo", "lore", "retos"];
   const TIPOS_ADJ = ["imagen", "archivo", "codigo"];
+  const VOTOS = ["like", "dislike"];
+  const ROLES_HIST = ["ia", "usuario"];
 
   /* ================= CONCIENCIA BASE (System Prompt) ================= */
   const BASE =
@@ -32,7 +36,7 @@
     "Sé claro, creativo y conciso; da pasos y ejemplos concretos. " +
     "Si faltan datos, haz suposiciones razonables y dilas en una línea. " +
     "Si el usuario comparte código, capturas o archivos, úsalos. " +
-    "Entrega el código dentro de bloques ``` indicando el lenguaje.";
+    "Entrega el código dentro de bloques " + F + " indicando el lenguaje.";
 
   const ENFOQUE_TXT = {
     mecanicas:
@@ -78,14 +82,16 @@
   /* ================= UTILIDADES ================= */
   const clone = (o) => JSON.parse(JSON.stringify(o));
   const texto = (v) => (typeof v === "string" ? v : "");
+  const valor = (v, defecto) => (v ? v : defecto);
+  const esObjeto = (v) => (v !== null && typeof v === "object");
   const nuevoId = () =>
     (global.crypto && global.crypto.randomUUID)
       ? global.crypto.randomUUID()
       : "id" + Date.now().toString(36) + Math.random().toString(36).slice(2, 10);
 
-  const porProveedor = (valor) => {
+  const porProveedor = (fn) => {
     const o = {};
-    PROVEEDORES.forEach((p) => { o[p] = valor(p); });
+    PROVEEDORES.forEach((p) => { o[p] = fn(p); });
     return o;
   };
 
@@ -105,7 +111,7 @@
   // Valida y completa lo guardado (evita errores si el JSON está viejo o alterado).
   function normalizar(data) {
     const cfg = clone(DEFAULT);
-    if (!data || typeof data !== "object") return cfg;
+    if (!esObjeto(data)) return cfg;
 
     cfg.completado = data.completado === true;
     if (IDIOMAS.includes(data.idioma)) cfg.idioma = data.idioma;
@@ -116,8 +122,9 @@
     PROVEEDORES.forEach((p) => {
       cfg.api_keys[p] = texto(data.api_keys && data.api_keys[p]).trim();
       cfg.modelos_custom[p] = texto(data.modelos_custom && data.modelos_custom[p]).trim();
-      const sel = data.modelos && data.modelos[p];
-      const valido = sel === OTRO || MODELOS[p].some((m) => m.id === sel);
+      const sel = data.modelos ? data.modelos[p] : undefined;
+      let valido = sel === OTRO;
+      if (!valido) valido = MODELOS[p].some((m) => m.id === sel);
       cfg.modelos[p] = valido ? sel : DEFAULT.modelos[p];
     });
     return cfg;
@@ -147,7 +154,8 @@
   }
 
   // Quita espacios, saltos de línea y comillas que se cuelan al copiar/pegar.
-  const limpiarKey = (v) => texto(v).replace(/\s+/g, "").replace(/^["']+|["']+$/g, "");
+  const limpiarKey = (v) =>
+    texto(v).replace(/\s+/g, "").replace(/^["']+/, "").replace(/["']+$/, "");
   const provValido = (p) => PROVEEDORES.includes(p);
 
   /* ================= CHATS ================= */
@@ -155,20 +163,21 @@
   let memoriaChats = null;
 
   function normalizarAdjunto(a) {
-    if (!a || typeof a !== "object" || !TIPOS_ADJ.includes(a.tipo)) return null;
+    if (!esObjeto(a)) return null;
+    if (!TIPOS_ADJ.includes(a.tipo)) return null;
     const o = { tipo: a.tipo, nombre: texto(a.nombre).slice(0, 100) };
     if (a.tipo === "imagen" && texto(a.mini).startsWith("data:image/")) o.mini = a.mini;
     return o;
   }
 
   function normalizarMensaje(m) {
-    if (!m || typeof m !== "object") return null;
+    if (!esObjeto(m)) return null;
     return {
-      id: texto(m.id) || nuevoId(),
+      id: valor(texto(m.id), nuevoId()),
       rol: m.rol === "ia" ? "ia" : "usuario",
       texto: texto(m.texto),
       adjuntos: Array.isArray(m.adjuntos) ? m.adjuntos.map(normalizarAdjunto).filter(Boolean).slice(0, 60) : [],
-      voto: m.voto === "like" || m.voto === "dislike" ? m.voto : null,
+      voto: VOTOS.includes(m.voto) ? m.voto : null,
       error: m.error === true,
       ts: Number.isFinite(m.ts) ? m.ts : Date.now()
     };
@@ -176,14 +185,16 @@
 
   function normalizarChats(raw) {
     const d = { activo: null, chats: [] };
-    if (!raw || typeof raw !== "object" || !Array.isArray(raw.chats)) return d;
+    if (!esObjeto(raw)) return d;
+    if (!Array.isArray(raw.chats)) return d;
     raw.chats.forEach((c) => {
-      if (!c || typeof c !== "object") return;
+      if (!esObjeto(c)) return;
       const id = texto(c.id);
-      if (!id || d.chats.some((x) => x.id === id)) return;
+      if (!id) return;
+      if (d.chats.some((x) => x.id === id)) return;
       d.chats.push({
         id,
-        titulo: texto(c.titulo).slice(0, 80) || TITULO_NUEVO,
+        titulo: valor(texto(c.titulo).slice(0, 80), TITULO_NUEVO),
         fijado: c.fijado === true,
         creado: Number.isFinite(c.creado) ? c.creado : Date.now(),
         actualizado: Number.isFinite(c.actualizado) ? c.actualizado : Date.now(),
@@ -210,8 +221,10 @@
   function indiceBorrable(d) {
     let idx = -1;
     d.chats.forEach((c, i) => {
-      if (c.fijado || c.id === d.activo) return;
-      if (idx === -1 || c.actualizado < d.chats[idx].actualizado) idx = i;
+      if (c.fijado) return;
+      if (c.id === d.activo) return;
+      if (idx === -1) { idx = i; return; }
+      if (c.actualizado < d.chats[idx].actualizado) idx = i;
     });
     return idx;
   }
@@ -251,13 +264,21 @@
     return false;
   }
 
-  const buscarChat = (id) => cargarChats().chats.find((c) => c.id === id) || null;
+  const buscarChat = (id) => {
+    const c = cargarChats().chats.find((x) => x.id === id);
+    return c ? c : null;
+  };
 
   function tituloDesde(t, adjuntos) {
     const limpio = texto(t).replace(/\s+/g, " ").trim();
     if (limpio) return limpio.length > 40 ? limpio.slice(0, 40).trim() + "…" : limpio;
-    const a = adjuntos && adjuntos[0];
-    return a ? (a.nombre || "Adjuntos") : TITULO_NUEVO;
+    const a = adjuntos ? adjuntos[0] : null;
+    return a ? valor(a.nombre, "Adjuntos") : TITULO_NUEVO;
+  }
+
+  function ordenarChats(a, b) {
+    const dif = Number(b.fijado) - Number(a.fijado);
+    return dif !== 0 ? dif : b.actualizado - a.actualizado;
   }
 
   /* ================= API PÚBLICA ================= */
@@ -290,9 +311,9 @@
     // System Prompt final: conciencia base + enfoque + idioma + extra del usuario.
     buildSystem() {
       let s = BASE + " " + ENFOQUE_TXT[cfg.enfoque];
-      s += ` Responde en ${IDIOMA_IA[cfg.idioma] || "español"}.`;
+      s += " Responde en " + valor(IDIOMA_IA[cfg.idioma], "español") + ".";
       const extra = cfg.extra.trim();
-      if (extra) s += ` Contexto del usuario: ${extra}`;
+      if (extra) s += " Contexto del usuario: " + extra;
       return s;
     },
 
@@ -302,10 +323,10 @@
       return [
         "AI Bridge Lite · configuración",
         "Proveedor: " + NOMBRES[p],
-        "Modelo: " + (API.getModeloId(p) || "sin modelo"),
+        "Modelo: " + valor(API.getModeloId(p), "sin modelo"),
         "Enfoque: " + ENFOQUE_NOMBRE[cfg.enfoque],
-        "Idioma: " + (IDIOMA_IA[cfg.idioma] || "español"),
-        "Instrucciones extra: " + (cfg.extra.trim() || "ninguna"),
+        "Idioma: " + valor(IDIOMA_IA[cfg.idioma], "español"),
+        "Instrucciones extra: " + valor(cfg.extra.trim(), "ninguna"),
         "",
         "System Prompt:",
         API.buildSystem()
@@ -321,15 +342,15 @@
     listarModelos: (p) => (provValido(p) ? MODELOS[p].slice() : []),
     getModeloSel: (p) => (provValido(p) ? cfg.modelos[p] : ""),
     getModeloCustom: (p) => (provValido(p) ? cfg.modelos_custom[p] : ""),
-    setModelo(p, valor) {
+    setModelo(p, v) {
       if (!provValido(p)) return false;
-      if (valor !== OTRO && !MODELOS[p].some((m) => m.id === valor)) return false;
-      cfg.modelos[p] = valor;
+      if (v !== OTRO && !MODELOS[p].some((m) => m.id === v)) return false;
+      cfg.modelos[p] = v;
       return guardar();
     },
-    setModeloCustom(p, valor) {
+    setModeloCustom(p, v) {
       if (!provValido(p)) return false;
-      cfg.modelos_custom[p] = texto(valor).trim().slice(0, 100);
+      cfg.modelos_custom[p] = texto(v).trim().slice(0, 100);
       return guardar();
     },
     // Nombre real que se envía a la API ("" si eligió "Otro" y no escribió nada).
@@ -339,20 +360,20 @@
     },
 
     // ----- API Keys (solo en este navegador) -----
-    setKey(p, valor) {
+    setKey(p, v) {
       if (!provValido(p)) return false;
-      cfg.api_keys[p] = limpiarKey(valor);
+      cfg.api_keys[p] = limpiarKey(v);
       return guardar();
     },
     getKey: (p) => (provValido(p) ? cfg.api_keys[p] : ""),
     tieneKey(p) {
-      const prov = p || cfg.proveedor_activo;
+      const prov = p ? p : cfg.proveedor_activo;
       return provValido(prov) && cfg.api_keys[prov].length >= MIN_KEY;
     },
 
     limiteImagenes: () => MAX_IMAGENES,
 
-    // { ok:true } o { ok:false, motivo:"sin_key" | "sin_modelo" }
+    // { ok:true } o { ok:false, motivo:"sin_key" o "sin_modelo" }
     listoParaEnviar() {
       const p = cfg.proveedor_activo;
       if (!API.tieneKey(p)) return { ok: false, motivo: "sin_key" };
@@ -364,7 +385,7 @@
     listarChats() {
       return cargarChats().chats
         .slice()
-        .sort((a, b) => (Number(b.fijado) - Number(a.fijado)) || (b.actualizado - a.actualizado))
+        .sort(ordenarChats)
         .map((c) => ({ id: c.id, titulo: c.titulo, fijado: c.fijado, actualizado: c.actualizado, total: c.mensajes.length }));
     },
     getChatActivoId() {
@@ -411,10 +432,11 @@
     // cambios permitidos: texto, voto, error, adjuntos
     actualizarMensaje(chatId, msgId, cambios) {
       const c = buscarChat(chatId);
-      const m = c && c.mensajes.find((x) => x.id === msgId);
-      if (!m || !cambios) return false;
+      const m = c ? c.mensajes.find((x) => x.id === msgId) : null;
+      if (!m) return false;
+      if (!cambios) return false;
       if (typeof cambios.texto === "string") m.texto = cambios.texto;
-      if ("voto" in cambios) m.voto = cambios.voto === "like" || cambios.voto === "dislike" ? cambios.voto : null;
+      if ("voto" in cambios) m.voto = VOTOS.includes(cambios.voto) ? cambios.voto : null;
       if (typeof cambios.error === "boolean") m.error = cambios.error;
       if (Array.isArray(cambios.adjuntos)) m.adjuntos = cambios.adjuntos.map(normalizarAdjunto).filter(Boolean).slice(0, 60);
       c.actualizado = Date.now();
@@ -431,15 +453,16 @@
     renombrarChat(id, titulo) {
       const c = buscarChat(id);
       const t = texto(titulo).trim().slice(0, 80);
-      if (!c || !t) return false;
+      if (!c) return false;
+      if (!t) return false;
       c.titulo = t;
       return guardarChats();
     },
-    esFijado: (id) => { const c = buscarChat(id); return !!(c && c.fijado); },
-    setFijado(id, valor) {
+    esFijado: (id) => { const c = buscarChat(id); return c ? c.fijado === true : false; },
+    setFijado(id, v) {
       const c = buscarChat(id);
       if (!c) return false;
-      c.fijado = valor === true;
+      c.fijado = v === true;
       return guardarChats();
     },
     borrarChat(id) {
@@ -485,7 +508,7 @@
        datos: { prompt_intencion, script_snippet, archivos:[{nombre,texto}],
                 imagenes:[base64], historial:[{rol,texto}] } */
     buildPayload(datos) {
-      const d = datos || {};
+      const d = datos ? datos : {};
       if (!API.listoParaEnviar().ok) return null;
 
       const prov = cfg.proveedor_activo;
@@ -505,7 +528,7 @@
         const lista = [];
         for (const a of d.archivos) {
           if (libre <= 0) break;
-          if (!a || typeof a !== "object") continue;
+          if (!esObjeto(a)) continue;
           const t = texto(a.texto).slice(0, libre);
           if (!t) continue;
           lista.push({ nombre: texto(a.nombre).slice(0, 100), texto: t });
@@ -519,7 +542,7 @@
       }
       if (Array.isArray(d.historial) && d.historial.length) {
         p.historial = d.historial
-          .filter((h) => h && (h.rol === "ia" || h.rol === "usuario") && texto(h.texto))
+          .filter((h) => esObjeto(h) && ROLES_HIST.includes(h.rol) && texto(h.texto))
           .slice(-MAX_HISTORIAL)
           .map((h) => ({ rol: h.rol, texto: texto(h.texto).slice(0, 4000) }));
       }
