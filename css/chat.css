@@ -52,6 +52,7 @@ input, select, textarea { font-family: inherit; font-size: 16px; color: var(--te
 
 /* ================= LAYOUT ================= */
 #app {
+  height: 100vh;
   height: 100dvh;
   max-width: 720px;
   margin: 0 auto;
@@ -554,4 +555,4 @@ select:focus, input[type="text"]:focus, input[type="password"]:focus, .hoja text
 
 @media (prefers-reduced-motion: reduce) {
   * { animation: none !important; transition: none !important; }
-    }
+}
