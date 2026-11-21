@@ -2,15 +2,15 @@
   "id": "./",
   "name": "AI Bridge Lite",
   "short_name": "Bridge Lite",
-  "description": "Asistente de IA en chat: puente entre tus capturas, código y la IA que elijas.",
+  "description": "Copiloto de IA para gamers y creadores de videojuegos. Usa tu propia API Key.",
   "lang": "es",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
-  "orientation": "portrait",
+  "orientation": "any",
   "background_color": "#020205",
   "theme_color": "#020205",
-  "categories": ["productivity", "developer tools"],
+  "categories": ["games", "entertainment", "productivity"],
   "icons": [
     {
       "src": "icons/icon-192.png",
