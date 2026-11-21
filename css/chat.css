@@ -39,7 +39,7 @@ body {
   user-select: none;
 }
 
-button { font-family: inherit; color: inherit; background: none; border: 0; cursor: pointer; }
+button { font-family: inherit; color: inherit; background: none; border: 0; cursor: pointer; touch-action: manipulation; }
 input, select, textarea { font-family: inherit; font-size: 16px; color: var(--text-main); }
 
 .ic {
@@ -59,6 +59,7 @@ input, select, textarea { font-family: inherit; font-size: 16px; color: var(--te
   display: flex;
   flex-direction: column;
   position: relative;
+  overflow: hidden;
 }
 
 /* ================= HEADER ================= */
@@ -171,17 +172,22 @@ input, select, textarea { font-family: inherit; font-size: 16px; color: var(--te
 
 /* ================= CONVERSACIÓN ================= */
 .chat {
-  flex: 1;
+  flex: 1 1 0;
   min-height: 0;
+  min-width: 0;
+  overflow-x: hidden;
   overflow-y: auto;
   overscroll-behavior: contain;
-  padding: 10px 12px 16px;
+  touch-action: pan-y;
+  padding: 10px 12px 24px;
   display: flex;
   flex-direction: column;
   -webkit-overflow-scrolling: touch;
   scrollbar-width: thin;
   scrollbar-color: var(--border-color) transparent;
 }
+/* Nada dentro del chat se encoge: el contenido crece y el chat hace scroll. */
+.chat > * { flex-shrink: 0; }
 
 .vacio {
   margin: auto;
@@ -201,14 +207,20 @@ input, select, textarea { font-family: inherit; font-size: 16px; color: var(--te
   text-shadow: 0 0 10px var(--accent-glow);
 }
 
-.mensajes { display: flex; flex-direction: column; gap: 14px; }
+.mensajes { display: flex; flex-direction: column; gap: 14px; width: 100%; min-width: 0; }
 .mensajes:empty { display: none; }
+.mensajes > * { flex-shrink: 0; }
 
-.msg { display: flex; flex-direction: column; max-width: 94%; }
+.msg { display: flex; flex-direction: column; max-width: 94%; min-width: 0; }
 .msg.usuario { align-self: flex-end; align-items: flex-end; }
 .msg.ia { align-self: flex-start; align-items: flex-start; width: 100%; max-width: 100%; }
 
 .burbuja {
+  flex: none;
+  max-width: 100%;
+  min-width: 0;
+  height: auto;
+  overflow: visible;
   padding: 10px 14px;
   border-radius: var(--radius-md);
   word-wrap: break-word;
@@ -218,6 +230,7 @@ input, select, textarea { font-family: inherit; font-size: 16px; color: var(--te
   -webkit-user-select: text;
   user-select: text;
 }
+.burbuja > div { min-width: 0; overflow-wrap: anywhere; }
 .msg.usuario .burbuja {
   background: rgba(255, 0, 127, 0.12);
   border: 1px solid rgba(255, 0, 127, 0.45);
@@ -247,6 +260,8 @@ input, select, textarea { font-family: inherit; font-size: 16px; color: var(--te
 /* Bloques de código colapsables */
 .codigo {
   margin: 8px 0;
+  max-width: 100%;
+  min-width: 0;
   background: var(--bg-input);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-md);
@@ -260,11 +275,12 @@ input, select, textarea { font-family: inherit; font-size: 16px; color: var(--te
 }
 .codigo-cab .ic { width: 18px; height: 18px; transition: transform var(--t); }
 .codigo.abierto .codigo-cab .ic.flecha { transform: rotate(180deg); }
-.codigo-lang { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.codigo-lang { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left; }
 .codigo-copiar { padding: 4px 8px; color: var(--text-muted); }
 .codigo pre {
   display: none;
   margin: 0; padding: 10px;
+  max-width: 100%;
   overflow-x: auto;
   font-size: 0.8rem; line-height: 1.45;
   color: var(--text-main);
@@ -276,7 +292,7 @@ input, select, textarea { font-family: inherit; font-size: 16px; color: var(--te
 .codigo.abierto pre { display: block; }
 
 /* Barra de acciones bajo cada respuesta */
-.acciones { display: flex; align-items: center; gap: 2px; margin-top: 4px; }
+.acciones { display: flex; align-items: center; flex-wrap: wrap; gap: 2px; margin-top: 4px; }
 .acciones button {
   width: 40px; height: 36px;
   display: inline-flex; align-items: center; justify-content: center;
@@ -446,6 +462,7 @@ input, select, textarea { font-family: inherit; font-size: 16px; color: var(--te
 }
 .hoja {
   width: 100%; max-width: 560px;
+  max-height: 92vh;
   max-height: 92dvh;
   display: flex; flex-direction: column;
   background: var(--bg-card);
@@ -555,4 +572,4 @@ select:focus, input[type="text"]:focus, input[type="password"]:focus, .hoja text
 
 @media (prefers-reduced-motion: reduce) {
   * { animation: none !important; transition: none !important; }
-}
+  }
