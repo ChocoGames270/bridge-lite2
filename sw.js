@@ -1,9 +1,9 @@
-/* AI Bridge Lite - Service Worker (Repo 2)
-   Rutas relativas al alcance del SW: funciona en la subruta de GitHub Pages.
+/* AI Bridge Lite - Service Worker
+   Caché primero (abre al instante) y actualiza en segundo plano.
    Sube CACHE_VERSION cada vez que cambies archivos de la web. */
 "use strict";
 
-const CACHE_VERSION = "v3";
+const CACHE_VERSION = "v4";
 const CACHE_NAME = "aibl-cache-" + CACHE_VERSION;
 
 const ARCHIVOS = [
@@ -19,7 +19,6 @@ const ARCHIVOS = [
 
 const aUrl = (ruta) => new URL(ruta, self.registration.scope).href;
 
-// Instalación: guarda cada archivo por separado (si uno falta, no se cae todo).
 self.addEventListener("install", (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) =>
@@ -34,7 +33,6 @@ self.addEventListener("install", (event) => {
   );
 });
 
-// Activación: borra cachés de versiones anteriores y toma el control.
 self.addEventListener("activate", (event) => {
   event.waitUntil(
     caches.keys()
@@ -49,7 +47,6 @@ self.addEventListener("activate", (event) => {
   );
 });
 
-// Peticiones: red primero, caché como respaldo sin conexión.
 // Solo archivos propios (GET). Las llamadas a las APIs de IA NUNCA se tocan.
 self.addEventListener("fetch", (event) => {
   const req = event.request;
@@ -59,20 +56,21 @@ self.addEventListener("fetch", (event) => {
   if (url.origin !== self.location.origin) return;
 
   event.respondWith(
-    fetch(req)
-      .then((resp) => {
-        if (resp && resp.ok) {
-          const copia = resp.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put(req, copia));
-        }
-        return resp;
-      })
-      .catch(() =>
-        caches.match(req, { ignoreSearch: true }).then((hit) => {
+    caches.match(req, { ignoreSearch: true }).then((hit) => {
+      const red = fetch(req)
+        .then((resp) => {
+          if (resp && resp.ok) {
+            const copia = resp.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put(req, copia));
+          }
+          return resp;
+        })
+        .catch(() => {
           if (hit) return hit;
           if (req.mode === "navigate") return caches.match(aUrl("index.html"));
           return Response.error();
-        })
-      )
+        });
+      return hit || red;
+    })
   );
 });
