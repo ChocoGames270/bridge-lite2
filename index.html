@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
   <title>AI Bridge Lite</title>
+  <meta name="description" content="Copiloto de IA para gamers y creadores de videojuegos. Usa tu propia API Key.">
   <meta name="theme-color" content="#020205">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
@@ -12,7 +13,7 @@
   <link rel="manifest" href="manifest.json">
   <link rel="icon" type="image/png" href="icons/icon-192.png">
   <link rel="apple-touch-icon" href="icons/icon-192.png">
-  <link rel="stylesheet" href="css/chat.css?v=2">
+  <link rel="stylesheet" href="css/chat.css?v=3">
 </head>
 <body>
 
@@ -35,8 +36,9 @@
     <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M23 4v6h-6M1 20v-6h6"/><path d="M3.5 9a9 9 0 0 1 14.9-3.4L23 10M1 14l4.6 4.4A9 9 0 0 0 20.5 15"/></symbol>
     <symbol id="i-copy" viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></symbol>
     <symbol id="i-sliders" viewBox="0 0 24 24"><path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6"/></symbol>
-    <symbol id="i-user" viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></symbol>
     <symbol id="i-chevron" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></symbol>
+    <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></symbol>
+    <symbol id="i-cfg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1"/></symbol>
   </svg>
 
   <div id="app">
@@ -59,6 +61,8 @@
           </button>
           <div class="popmenu der" id="menu-chat" hidden>
             <button type="button" id="btn-fijar"><svg class="ic"><use href="#i-pin"/></svg><span id="txt-fijar">Fijar chat</span></button>
+            <button type="button" id="btn-copiar-chat"><svg class="ic"><use href="#i-copy"/></svg><span>Copiar chat</span></button>
+            <button type="button" id="btn-copiar-config"><svg class="ic"><use href="#i-cfg"/></svg><span>Copiar configuración</span></button>
             <button type="button" id="btn-compartir-chat"><svg class="ic"><use href="#i-share"/></svg><span>Compartir</span></button>
             <button type="button" id="btn-borrar-chat" class="peligro"><svg class="ic"><use href="#i-trash"/></svg><span>Borrar chat</span></button>
           </div>
@@ -69,17 +73,34 @@
     <!-- Estado de la IA activa (toca para abrir ajustes) -->
     <button type="button" id="chip-estado" class="chip-estado" aria-label="Abrir ajustes de IA"></button>
 
+    <!-- Enfoque de juego y creación (un toque) -->
+    <div id="enfoques" class="enfoques" role="group" aria-label="Enfoque">
+      <button type="button" class="chip" data-enfoque="mecanicas">Mecánicas y Sistemas</button>
+      <button type="button" class="chip" data-enfoque="balanceo">Balanceo y Progresión</button>
+      <button type="button" class="chip" data-enfoque="lore">Lore, Ítems y Mundo</button>
+      <button type="button" class="chip" data-enfoque="retos">Retos / Ideas Gamer</button>
+    </div>
+
     <!-- ============ CONVERSACIÓN ============ -->
     <main id="chat" class="chat">
       <div id="vacio" class="vacio">
         <div class="logo-ai">AI</div>
-        <p>Tu puente hacia la IA</p>
+        <p>Tu copiloto para juegos y partidas</p>
+        <button type="button" class="chip js-instalar" hidden>Instalar app</button>
       </div>
       <div id="mensajes" class="mensajes" aria-live="polite"></div>
     </main>
 
     <!-- ============ BARRA DE ENTRADA ============ -->
     <footer class="composer">
+      <!-- Atajos de un toque: insertan una plantilla en el cuadro de texto -->
+      <div id="atajos" class="atajos" role="group" aria-label="Atajos">
+        <button type="button" class="chip" data-atajo="mecanica">Estructurar mecánica</button>
+        <button type="button" class="chip" data-atajo="balanceo">Equilibrar stats y costos</button>
+        <button type="button" class="chip" data-atajo="items">Nombres e ítems</button>
+        <button type="button" class="chip" data-atajo="retos">Ideas de retos</button>
+      </div>
+
       <div id="adjuntos" class="adjuntos" hidden></div>
 
       <div class="fila-input">
@@ -91,18 +112,6 @@
             <button type="button" id="btn-adj-imagen"><svg class="ic"><use href="#i-image"/></svg><span>Imágenes</span></button>
             <button type="button" id="btn-adj-archivo"><svg class="ic"><use href="#i-file"/></svg><span>Archivos y documentos</span></button>
             <button type="button" id="btn-adj-codigo"><svg class="ic"><use href="#i-code"/></svg><span>Fragmento de código</span></button>
-          </div>
-        </div>
-
-        <div class="menu-wrap">
-          <button type="button" class="btn-ai" id="btn-modo-flotante" aria-label="Modo flotante" aria-haspopup="true" aria-expanded="false">AI</button>
-          <div class="popmenu arriba" id="menu-flotante" hidden>
-            <button type="button" id="btn-modo-captura" data-modo-captura="captura">
-              <svg class="ic"><use href="#i-image"/></svg><span>Modo Captura<small>Toma única</small></span>
-            </button>
-            <button type="button" id="btn-modo-multi" data-modo-captura="multi">
-              <svg class="ic"><use href="#i-copy"/></svg><span>Modo Multi-Captura<small>Ráfaga o secuencia</small></span>
-            </button>
           </div>
         </div>
 
@@ -118,12 +127,12 @@
       </div>
 
       <input type="file" id="file-imagenes" accept="image/*" multiple hidden>
-      <input type="file" id="file-archivos" accept=".txt,.md,.json,.csv,.xml,.html,.css,.js,.ts,.lua,.luau,.py,.cs,.cpp,.c,.h,.java,.kt,.pdf,text/*" multiple hidden>
+      <input type="file" id="file-archivos" accept=".txt,.md,.json,.csv,.xml,.html,.css,.js,.ts,.lua,.luau,.py,.cs,.cpp,.c,.h,.java,.kt,text/*" multiple hidden>
     </footer>
 
   </div>
 
-  <!-- ============ PANEL LATERAL (historial + cuenta) ============ -->
+  <!-- ============ PANEL LATERAL (historial) ============ -->
   <div id="velo" class="velo"></div>
   <aside id="panel" class="panel" aria-hidden="true">
     <div class="panel-cab">
@@ -140,15 +149,8 @@
     <nav id="lista-chats" class="lista-chats" aria-label="Historial de chats"></nav>
 
     <div class="panel-pie">
-      <div class="cuenta">
-        <div class="avatar" id="cuenta-avatar"><svg class="ic"><use href="#i-user"/></svg></div>
-        <div class="cuenta-datos">
-          <strong id="cuenta-nombre">Invitado</strong>
-          <small id="cuenta-estado">Sin sesión de Google</small>
-        </div>
-      </div>
-      <button type="button" class="panel-btn" id="btn-google">
-        <svg class="ic"><use href="#i-user"/></svg><span id="txt-google">Iniciar sesión con Google</span>
+      <button type="button" class="panel-btn js-instalar" id="btn-instalar" hidden>
+        <svg class="ic"><use href="#i-download"/></svg><span>Instalar app</span>
       </button>
       <button type="button" class="panel-btn" id="btn-ajustes">
         <svg class="ic"><use href="#i-sliders"/></svg><span>Ajustes</span>
@@ -167,42 +169,28 @@
       </div>
 
       <div class="hoja-cuerpo">
-        <p class="estado" id="ajustes-intro" hidden>Elige cómo usar la IA. Puedes empezar con la IA nativa sin API Key.</p>
+        <p class="estado" id="ajustes-intro" hidden>Pega tu API Key y empieza a chatear. Se guarda solo en este navegador.</p>
 
-        <h3>Motor de IA</h3>
-        <div class="seg" id="seg-modo">
-          <button type="button" class="seg-b" data-modo="nativa">IA nativa</button>
-          <button type="button" class="seg-b" data-modo="byok">Mi API Key</button>
+        <h3>Tu IA</h3>
+        <span class="etiqueta">Proveedor</span>
+        <div class="chips">
+          <button type="button" class="chip" data-proveedor="gemini">Gemini</button>
+          <button type="button" class="chip" data-proveedor="claude">Claude</button>
+          <button type="button" class="chip" data-proveedor="openai">OpenAI</button>
         </div>
 
-        <!-- IA nativa: límite semanal -->
-        <div id="bloque-nativa">
-          <div class="barra"><i id="uso-relleno"></i></div>
-          <p class="estado" id="uso-texto"></p>
+        <label class="etiqueta" for="cfg-modelo">Modelo</label>
+        <select id="cfg-modelo"></select>
+        <input type="text" id="cfg-modelo-custom" placeholder="Nombre exacto del modelo" autocomplete="off" autocapitalize="off" spellcheck="false" hidden>
+
+        <label class="etiqueta" for="cfg-key">API Key de <span id="cfg-key-proveedor">Gemini</span></label>
+        <input type="password" id="cfg-key" placeholder="Pega tu API Key" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false">
+        <div class="fila">
+          <button type="button" class="chip" id="btn-ver-key">VER</button>
+          <button type="button" class="chip" id="btn-guardar-key">GUARDAR</button>
+          <button type="button" class="chip" id="btn-borrar-key">BORRAR</button>
         </div>
-
-        <!-- Modo Puente (BYOK) -->
-        <div id="bloque-byok" hidden>
-          <span class="etiqueta">Proveedor</span>
-          <div class="chips">
-            <button type="button" class="chip" data-proveedor="gemini">Gemini</button>
-            <button type="button" class="chip" data-proveedor="claude">Claude</button>
-            <button type="button" class="chip" data-proveedor="openai">OpenAI</button>
-          </div>
-
-          <label class="etiqueta" for="cfg-modelo">Modelo</label>
-          <select id="cfg-modelo"></select>
-          <input type="text" id="cfg-modelo-custom" placeholder="Nombre exacto del modelo" autocomplete="off" autocapitalize="off" spellcheck="false" hidden>
-
-          <label class="etiqueta" for="cfg-key">API Key de <span id="cfg-key-proveedor">Gemini</span></label>
-          <input type="password" id="cfg-key" placeholder="Pega tu API Key" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false">
-          <div class="fila">
-            <button type="button" class="chip" id="btn-ver-key">VER</button>
-            <button type="button" class="chip" id="btn-guardar-key">GUARDAR</button>
-            <button type="button" class="chip" id="btn-borrar-key">BORRAR</button>
-          </div>
-          <p class="estado" id="cfg-key-estado" role="status" aria-live="polite"></p>
-        </div>
+        <p class="estado" id="cfg-key-estado" role="status" aria-live="polite"></p>
 
         <h3>Preferencias</h3>
         <label class="etiqueta" for="cfg-idioma">Idioma de respuesta</label>
@@ -212,27 +200,8 @@
           <option value="pt">Português</option>
         </select>
 
-        <span class="etiqueta">Áreas de enfoque</span>
-        <div class="chips">
-          <button type="button" class="chip" data-area="scripts">Scripts</button>
-          <button type="button" class="chip" data-area="3d">3D</button>
-          <button type="button" class="chip" data-area="vfx">VFX</button>
-          <button type="button" class="chip" data-area="aprendiz">Aprendiz</button>
-        </div>
-
-        <span class="etiqueta">Perfil de respuesta</span>
-        <div class="chips">
-          <button type="button" class="chip" data-perfil="visual">Visual</button>
-          <button type="button" class="chip" data-perfil="script">Script</button>
-          <button type="button" class="chip" data-perfil="hibrido">Híbrido</button>
-          <button type="button" class="chip" data-perfil="optimizacion">Optimización</button>
-        </div>
-
-        <h3>Plan y aportaciones</h3>
-        <div class="plan">
-          <p id="plan-actual">Plan actual: Gratis</p>
-          <button type="button" class="chip" id="btn-plan" disabled>PLANES Y APORTES · PRÓXIMAMENTE</button>
-        </div>
+        <label class="etiqueta" for="cfg-extra">Instrucciones extra (opcional)</label>
+        <textarea id="cfg-extra" rows="3" maxlength="600" placeholder="Ej: mi juego es un RPG por turnos, tono épico" spellcheck="false"></textarea>
       </div>
 
       <div class="hoja-pie">
@@ -272,7 +241,7 @@
   <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
 
   <!-- onboarding.js debe cargarse ANTES de consola.js -->
-  <script src="js/onboarding.js?v=2"></script>
-  <script src="js/consola.js?v=2"></script>
+  <script src="js/onboarding.js?v=3"></script>
+  <script src="js/consola.js?v=3"></script>
 </body>
           </html>
