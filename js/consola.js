@@ -4,7 +4,8 @@
   "use strict";
 
   const ob = global.AIBridgeOnboarding;
-  const $ = (id) => document.getElementById(id); const $$ = (sel) => Array.from(document.querySelectorAll(sel));
+  const $ = (id) => document.getElementById(id);
+  const $$ = (sel) => Array.from(document.querySelectorAll(sel));
 
   if (!ob) {
     document.body.textContent = "No se pudo cargar js/onboarding.js. Revisa que el archivo exista.";
@@ -12,6 +13,7 @@
   }
 
   const NS = "http://www.w3.org/2000/svg";
+  const F = "\x60\x60\x60"; // tres comillas invertidas (bloque de código)
   const NOMBRES = ob.NOMBRES;
   const IDIOMA_VOZ = { es: "es-ES", en: "en-US", pt: "pt-BR" };
   const MIME = "image/jpeg";
@@ -59,12 +61,20 @@
   /* ============ UTILIDADES ============ */
   const nuevoId = () => "p" + (++idLocal) + Date.now().toString(36);
 
+  // Ajusta el alto de la app al alto real visible (barra de entrada siempre a la vista).
+  function ajustarAlto() {
+    const vv = global.visualViewport;
+    const h = Math.round(vv ? vv.height : global.innerHeight);
+    if (h > 0) $("app").style.height = h + "px";
+    if (global.scrollY !== 0) global.scrollTo(0, 0);
+  }
+
   function toast(t, ms) {
     const el = $("toast");
     el.textContent = t;
     el.hidden = false;
     clearTimeout(toast.t);
-    toast.t = setTimeout(() => { el.hidden = true; }, ms || 2200);
+    toast.t = setTimeout(() => { el.hidden = true; }, ms ? ms : 2200);
   }
 
   function icono(nombre, clase) {
@@ -99,7 +109,7 @@
     if (!t) return;
     if (global.navigator.share) {
       try {
-        await global.navigator.share({ title: titulo || "AI Bridge Lite", text: t });
+        await global.navigator.share({ title: titulo ? titulo : "AI Bridge Lite", text: t });
         return;
       } catch (e) {
         if (e && e.name === "AbortError") return;
@@ -137,7 +147,20 @@
   function cerrarPanel() {
     $("panel").classList.remove("abierto");
     $("velo").classList.remove("abierto");
-    $("panel").setAttribute("aria-hidden", "true"); }    /* ============ INSTALAR (PWA) ============ */ const esStandalone = () => (global.matchMedia && global.matchMedia("(display-mode: standalone)").matches) \vert{}\vert{} global.navigator.standalone === true; const esIOS = () => /iphone\vert{}ipad\vert{}ipod/i.test(global.navigator.userAgent);    function renderInstalar() { const mostrar = !esStandalone() && (!!instalador \vert{}\vert{} esIOS()); $$(".js-instalar").forEach((b) => { b.hidden = !mostrar; });
+    $("panel").setAttribute("aria-hidden", "true");
+  }
+
+  /* ============ INSTALAR (PWA) ============ */
+  function esStandalone() {
+    if (global.matchMedia && global.matchMedia("(display-mode: standalone)").matches) return true;
+    return global.navigator.standalone === true;
+  }
+  const esIOS = () => /iphone/i.test(global.navigator.userAgent) ? true : /ipad/i.test(global.navigator.userAgent);
+
+  function renderInstalar() {
+    const hayOpcion = instalador ? true : esIOS();
+    const mostrar = !esStandalone() && hayOpcion;
+    $$(".js-instalar").forEach((b) => { b.hidden = !mostrar; });
   }
 
   async function instalar() {
@@ -171,7 +194,15 @@
     const prov = ob.getConfig().proveedor_activo;
     const modelo = ob.getModeloId(prov);
     const key = ob.tieneKey(prov);
-    const el = $("chip-estado"); el.textContent = `${NOMBRES[prov]} · ${modelo \vert{}\vert{} "sin modelo"} · ${key ? "key lista" : "sin API Key"}`; el.className = "chip-estado " + (key && modelo ? "ok" : "alerta"); }    /* ============ ENFOQUES Y ATAJOS ============ */ function renderEnfoques() { const e = ob.getEnfoque(); $$("[data-enfoque]").forEach((c) => c.classList.toggle("active", c.dataset.enfoque === e));
+    const el = $("chip-estado");
+    el.textContent = NOMBRES[prov] + " · " + (modelo ? modelo : "sin modelo") + " · " + (key ? "key lista" : "sin API Key");
+    el.className = "chip-estado " + (key && modelo ? "ok" : "alerta");
+  }
+
+  /* ============ ENFOQUES Y ATAJOS ============ */
+  function renderEnfoques() {
+    const e = ob.getEnfoque();
+    $$("[data-enfoque]").forEach((c) => c.classList.toggle("active", c.dataset.enfoque === e));
   }
 
   function usarAtajo(id) {
@@ -207,7 +238,8 @@
     const prov = cfg.proveedor_activo;
 
     $("cfg-idioma").value = cfg.idioma;
-    $("cfg-extra").value = cfg.extra; $$(".chip[data-proveedor]").forEach((c) => c.classList.toggle("active", c.dataset.proveedor === prov));
+    $("cfg-extra").value = cfg.extra;
+    $$(".chip[data-proveedor]").forEach((c) => c.classList.toggle("active", c.dataset.proveedor === prov));
 
     const sel = $("cfg-modelo");
     sel.textContent = "";
@@ -238,9 +270,9 @@
     const prov = ob.getConfig().proveedor_activo;
     const el = $("cfg-key-estado");
     if (ob.tieneKey(prov)) {
-      setEstado(el, `✔ Key de ${NOMBRES[prov]} guardada solo en este navegador.`, "ok");
+      setEstado(el, "✔ Key de " + NOMBRES[prov] + " guardada solo en este navegador.", "ok");
     } else {
-      setEstado(el, `⚠ Aún no hay API Key de ${NOMBRES[prov]}. Pégala arriba y toca GUARDAR.`, "alerta");
+      setEstado(el, "⚠ Aún no hay API Key de " + NOMBRES[prov] + ". Pégala arriba y toca GUARDAR.", "alerta");
     }
   }
 
@@ -275,7 +307,8 @@
     $("modal-ajustes").addEventListener("click", (e) => { if (e.target === $("modal-ajustes")) cerrarAjustes(); });
 
     $("cfg-idioma").addEventListener("change", (e) => ob.setIdioma(e.target.value));
-    $("cfg-extra").addEventListener("input", (e) => ob.setExtra(e.target.value)); $$(".chip[data-proveedor]").forEach((c) =>
+    $("cfg-extra").addEventListener("input", (e) => ob.setExtra(e.target.value));
+    $$(".chip[data-proveedor]").forEach((c) =>
       c.addEventListener("click", () => { ob.setProveedorActivo(c.dataset.proveedor); renderAjustes(); renderEstado(); }));
 
     $("cfg-modelo").addEventListener("change", (e) => {
@@ -344,7 +377,7 @@
   const imagenesPendientes = () => pendientes.filter((a) => a.tipo === "imagen");
 
   async function agregarImagenes(files) {
-    const lista = Array.from(files || []);
+    const lista = Array.from(files ? files : []);
     if (!lista.length) return;
     let libres = ob.limiteImagenes() - imagenesPendientes().length;
     let omitidas = 0;
@@ -352,33 +385,34 @@
       if (libres <= 0) { omitidas++; continue; }
       try {
         const r = await imagenDeArchivo(f);
-        pendientes.push({ id: nuevoId(), tipo: "imagen", nombre: f.name || "imagen", dataUrl: r.dataUrl, mini: r.mini });
+        pendientes.push({ id: nuevoId(), tipo: "imagen", nombre: f.name ? f.name : "imagen", dataUrl: r.dataUrl, mini: r.mini });
         libres--;
       } catch (_) {
         omitidas++;
       }
     }
     renderAdjuntos();
-    if (omitidas) toast(`Se omitieron ${omitidas} imagen(es) (límite de ${ob.limiteImagenes()} o formato no válido).`, 3200);
+    if (omitidas) toast("Se omitieron " + omitidas + " imagen(es) (límite de " + ob.limiteImagenes() + " o formato no válido).", 3200);
   }
 
   async function agregarArchivos(files) {
     let omitidos = 0, pdf = 0, truncados = 0;
-    for (const f of Array.from(files || [])) {
+    for (const f of Array.from(files ? files : [])) {
       if (f.type && f.type.startsWith("image/")) { await agregarImagenes([f]); continue; }
-      if (/\.pdf$/i.test(f.name) || f.type === "application/pdf") { pdf++; continue; }
+      if (/\.pdf$/i.test(f.name)) { pdf++; continue; }
+      if (f.type === "application/pdf") { pdf++; continue; }
       try {
         const t = await f.slice(0, MAX_BYTES_TEXTO).text();
         if (t.indexOf("\u0000") !== -1) { omitidos++; continue; }
         if (f.size > MAX_BYTES_TEXTO) truncados++;
-        pendientes.push({ id: nuevoId(), tipo: "archivo", nombre: f.name || "archivo", texto: t });
+        pendientes.push({ id: nuevoId(), tipo: "archivo", nombre: f.name ? f.name : "archivo", texto: t });
       } catch (_) {
         omitidos++;
       }
     }
     renderAdjuntos();
     if (pdf) toast("Los PDF aún no se pueden leer. Pega el texto como código.", 3500);
-    else if (omitidos) toast(`Se omitieron ${omitidos} archivo(s) no legibles.`, 3000);
+    else if (omitidos) toast("Se omitieron " + omitidos + " archivo(s) no legibles.", 3000);
     else if (truncados) toast("Archivo grande: se envía solo el inicio.", 3000);
   }
 
@@ -436,8 +470,8 @@
   function adjuntarCodigo() {
     const t = $("codigo-texto").value.trim();
     if (!t) { toast("Pega el código primero."); return; }
-    const nombre = $("codigo-nombre").value.trim().slice(0, 40) || "código";
-    pendientes.push({ id: nuevoId(), tipo: "codigo", nombre, texto: t.slice(0, ob.MAX_SNIPPET) });
+    const nombre = $("codigo-nombre").value.trim().slice(0, 40);
+    pendientes.push({ id: nuevoId(), tipo: "codigo", nombre: nombre ? nombre : "código", texto: t.slice(0, ob.MAX_SNIPPET) });
     cerrarCodigo();
     renderAdjuntos();
   }
@@ -461,21 +495,22 @@
 
   function actualizarEnviar() {
     const btn = $("btn-enviar");
-    const hay = $("entrada").value.trim().length > 0 || pendientes.length > 0;
-    btn.disabled = !(hay || enviando);
+    const hayTexto = $("entrada").value.trim().length > 0;
+    const hay = hayTexto ? true : pendientes.length > 0;
+    btn.disabled = !(hay ? true : enviando);
     btn.setAttribute("aria-label", enviando ? "Detener" : "Enviar");
     btn.querySelector("use").setAttribute("href", enviando ? "#i-x" : "#i-send");
   }
 
   /* ---------- Voz (dictado) ---------- */
   function alternarVoz() {
-    const SR = global.SpeechRecognition || global.webkitSpeechRecognition;
+    const SR = global.SpeechRecognition ?? global.webkitSpeechRecognition;
     if (!SR) { toast("Tu navegador no admite dictado por voz."); return; }
 
     if (reconocimiento) { reconocimiento.stop(); return; }
 
     const rec = new SR();
-    rec.lang = IDIOMA_VOZ[ob.getConfig().idioma] || "es-ES";
+    rec.lang = IDIOMA_VOZ[ob.getConfig().idioma] ?? "es-ES";
     rec.interimResults = true;
     rec.continuous = false;
 
@@ -491,7 +526,7 @@
       actualizarEnviar();
     };
     rec.onerror = (e) => {
-      if (e.error === "not-allowed" || e.error === "service-not-allowed") toast("Permite el micrófono para dictar.", 3000);
+      if (["not-allowed", "service-not-allowed"].includes(e.error)) toast("Permite el micrófono para dictar.", 3000);
     };
     rec.onend = () => {
       reconocimiento = null;
@@ -511,12 +546,13 @@
   function bajar() {
     const c = $("chat");
     c.scrollTop = c.scrollHeight;
+    requestAnimationFrame(() => { c.scrollTop = c.scrollHeight; });
   }
 
-  // Divide el texto en trozos de texto y bloques ``` de código.
+  // Divide el texto en trozos de texto y bloques de código.
   function partirTexto(t) {
     const segs = [];
-    const re = /```([^\n`]*)\n?([\s\S]*?)```/g;
+    const re = new RegExp(F + "([^\\n\\x60]*)\\n?([\\s\\S]*?)" + F, "g");
     let ult = 0, m;
     while ((m = re.exec(t)) !== null) {
       if (m.index > ult) segs.push({ tipo: "texto", t: t.slice(ult, m.index) });
@@ -524,7 +560,7 @@
       ult = re.lastIndex;
     }
     const resto = t.slice(ult);
-    const abierto = resto.indexOf("```");
+    const abierto = resto.indexOf(F);
     if (abierto !== -1) { // bloque sin cerrar (respuesta cortada)
       if (abierto > 0) segs.push({ tipo: "texto", t: resto.slice(0, abierto) });
       const cuerpo = resto.slice(abierto + 3);
@@ -551,7 +587,7 @@
     const lang = document.createElement("button");
     lang.type = "button";
     lang.className = "codigo-lang";
-    lang.textContent = `${seg.lang || "código"} · ${lineas} ${lineas === 1 ? "línea" : "líneas"}`;
+    lang.textContent = (seg.lang ? seg.lang : "código") + " · " + lineas + (lineas === 1 ? " línea" : " líneas");
 
     const copiar = document.createElement("button");
     copiar.type = "button";
@@ -591,7 +627,7 @@
       if (s.tipo === "codigo") {
         b.appendChild(crearCodigo(s));
       } else {
-        const t = s.t.replace(/^\n+|\n+$/g, "");
+        const t = s.t.replace(/^\n+/, "").replace(/\n+$/, "");
         if (!t) return;
         const d = document.createElement("div");
         d.textContent = t;
@@ -669,8 +705,9 @@
     }
 
     if (m.texto) wrap.appendChild(crearBurbuja(m.texto));
-    if (m.rol === "ia" && !m.error) wrap.appendChild(crearAcciones(m, chatId, esUltimo));
-    else if (m.rol === "ia" && esUltimo) {
+    if (m.rol === "ia" && !m.error) {
+      wrap.appendChild(crearAcciones(m, chatId, esUltimo));
+    } else if (m.rol === "ia" && esUltimo) {
       const barra = document.createElement("div");
       barra.className = "acciones";
       const r = botonAccion("refresh", "Reintentar");
@@ -703,7 +740,7 @@
     const msgs = chat ? chat.mensajes : [];
     const escribiendo = enviando && chatEnviandoId === id;
 
-    $("vacio").hidden = msgs.length > 0 || escribiendo;
+    $("vacio").hidden = msgs.length > 0 ? true : escribiendo;
 
     msgs.forEach((m, i) => cont.appendChild(crearMensajeEl(m, id, i === msgs.length - 1)));
 
@@ -730,7 +767,7 @@
     const cont = $("lista-chats");
     cont.textContent = "";
     const act = ob.getChatActivoId();
-    const lista = ob.listarChats().filter((c) => c.total > 0 || c.id === act);
+    const lista = ob.listarChats().filter((c) => (c.total > 0 ? true : c.id === act));
 
     const grupo = (titulo, items) => {
       if (!items.length) return;
@@ -817,18 +854,19 @@
   function construirTexto(p) {
     let t = p.prompt_intencion;
     if (p.script_snippet) t += "\n\n[CÓDIGO]\n" + p.script_snippet;
-    (p.archivos || []).forEach((a) => { t += `\n\n[ARCHIVO: ${a.nombre}]\n${a.texto}`; });
+    (p.archivos ?? []).forEach((a) => { t += "\n\n[ARCHIVO: " + a.nombre + "]\n" + a.texto; });
     return t;
   }
 
   // Turnos alternados usuario/ia; el último siempre es el mensaje actual del usuario.
   function turnosDe(p) {
-    const lista = (p.historial || []).map((h) => ({ rol: h.rol, texto: h.texto }));
+    const lista = (p.historial ?? []).map((h) => ({ rol: h.rol, texto: h.texto }));
     lista.push({ rol: "usuario", texto: construirTexto(p) });
     const out = [];
     lista.forEach((x) => {
       const u = out[out.length - 1];
-      if (u && u.rol === x.rol) u.texto += "\n\n" + x.texto; else out.push({ rol: x.rol, texto: x.texto });
+      if (u && u.rol === x.rol) u.texto += "\n\n" + x.texto;
+      else out.push({ rol: x.rol, texto: x.texto });
     });
     while (out.length && out[0].rol !== "usuario") out.shift();
     return out;
@@ -836,7 +874,7 @@
 
   function armarPeticion(prov, key, modelo, system, p) {
     const turnos = turnosDe(p);
-    const imgs = p.imagenes || [];
+    const imgs = p.imagenes ?? [];
     const ult = turnos.length - 1;
 
     if (prov === "gemini") {
@@ -847,7 +885,7 @@
       });
       const id = encodeURIComponent(modelo.replace(/^models\//, ""));
       return {
-        url: `https://generativelanguage.googleapis.com/v1beta/models/${id}:generateContent`,
+        url: "https://generativelanguage.googleapis.com/v1beta/models/" + id + ":generateContent",
         headers: { "x-goog-api-key": key }, // la key va en header, nunca en la URL
         body: {
           systemInstruction: { parts: [{ text: system }] },
@@ -879,44 +917,47 @@
     turnos.forEach((t, i) => {
       if (i !== ult) { messages.push({ role: t.rol === "ia" ? "assistant" : "user", content: t.texto }); return; }
       const content = [{ type: "text", text: t.texto }];
-      imgs.forEach((d) => content.push({ type: "image_url", image_url: { url: `data:${MIME};base64,${d}` } }));
+      imgs.forEach((d) => content.push({ type: "image_url", image_url: { url: "data:" + MIME + ";base64," + d } }));
       messages.push({ role: "user", content });
     });
     return {
       url: "https://api.openai.com/v1/chat/completions",
-      headers: { Authorization: `Bearer ${key}` },
+      headers: { Authorization: "Bearer " + key },
       body: { model: modelo, max_completion_tokens: MAX_TOKENS, messages }
     };
   }
 
   function parsearRespuesta(prov, data) {
     if (prov === "gemini") {
-      const parts = (data.candidates && data.candidates[0] && data.candidates[0].content &&
-        data.candidates[0].content.parts) || [];
-      return parts.map((p) => p.text || "").join("");
+      const c = data.candidates ? data.candidates[0] : null;
+      const parts = c && c.content && c.content.parts ? c.content.parts : [];
+      return parts.map((p) => (p.text ? p.text : "")).join("");
     }
-    if (prov === "claude") return (data.content || []).map((c) => c.text || "").join("");
-    const m = data.choices && data.choices[0] && data.choices[0].message;
-    return (m && m.content) || "";
+    if (prov === "claude") {
+      return (data.content ?? []).map((c) => (c.text ? c.text : "")).join("");
+    }
+    const ch = data.choices ? data.choices[0] : null;
+    return ch && ch.message && ch.message.content ? ch.message.content : "";
   }
 
   function errorAmigable(status, raw) {
     let detalle = "";
     try {
       const e = JSON.parse(raw).error;
-      detalle = typeof e === "string" ? e : (e && e.message) || "";
+      if (typeof e === "string") detalle = e;
+      else if (e && e.message) detalle = e.message;
     } catch (_) {}
     detalle = String(detalle).slice(0, 300);
 
-    const base =
-      status === 400 ? "Petición rechazada (revisa el modelo o la cantidad y tamaño de las imágenes)." :
-      status === 401 || status === 403 ? "API Key inválida o sin permisos." :
-      status === 404 ? "Modelo no encontrado. En Ajustes elige otro o usa «Otro» con el nombre exacto." :
-      status === 413 ? "Demasiado contenido. Envía menos imágenes o archivos." :
-      status === 429 ? "Límite de uso alcanzado. Espera un momento." :
-      status >= 500 ? "El servidor de IA tiene problemas. Intenta más tarde." :
-      `Error del servidor (${status}).`;
-    return detalle ? `${base}\n${detalle}` : base;
+    let base;
+    if (status === 400) base = "Petición rechazada (revisa el modelo o la cantidad y tamaño de las imágenes).";
+    else if ([401, 403].includes(status)) base = "API Key inválida o sin permisos.";
+    else if (status === 404) base = "Modelo no encontrado. En Ajustes elige otro o usa «Otro» con el nombre exacto.";
+    else if (status === 413) base = "Demasiado contenido. Envía menos imágenes o archivos.";
+    else if (status === 429) base = "Límite de uso alcanzado. Espera un momento.";
+    else if (status >= 500) base = "El servidor de IA tiene problemas. Intenta más tarde.";
+    else base = "Error del servidor (" + status + ").";
+    return detalle ? base + "\n" + detalle : base;
   }
 
   async function llamarIA(payload, signal) {
@@ -981,7 +1022,7 @@
     }
 
     const payload = ob.buildPayload({
-      prompt_intencion: datos.texto || "Analiza los adjuntos.",
+      prompt_intencion: datos.texto ? datos.texto : "Analiza los adjuntos.",
       script_snippet: datos.snippet,
       archivos: datos.archivos,
       imagenes: datos.imagenes,
@@ -1028,17 +1069,17 @@
     const imagenes = imgs.map((a) => a.dataUrl.slice(a.dataUrl.indexOf(",") + 1));
     const codigos = pendientes.filter((a) => a.tipo === "codigo");
     const archivos = pendientes.filter((a) => a.tipo === "archivo").map((a) => ({ nombre: a.nombre, texto: a.texto }));
-    const snippet = codigos.map((c) => `[${c.nombre}]\n${c.texto}`).join("\n\n");
+    const snippet = codigos.map((c) => "[" + c.nombre + "]\n" + c.texto).join("\n\n");
 
-    // Lo que se guarda en el chat: el texto + el código en bloques ``` (se ve colapsable).
-    const textoGuardado = (texto + codigos.map((c) => `\n\n\`\`\`${c.nombre}\n${c.texto}\n\`\`\``).join("")).trim();
+    // Lo que se guarda en el chat: el texto + el código en bloques (se ve colapsable).
+    const textoGuardado = (texto + codigos.map((c) => "\n\n" + F + c.nombre + "\n" + c.texto + "\n" + F).join("")).trim();
 
     const adj = [];
     imgs.slice(0, MINIS_GUARDADAS).forEach((a) => adj.push({ tipo: "imagen", nombre: a.nombre, mini: a.mini }));
-    if (imgs.length > MINIS_GUARDADAS) adj.push({ tipo: "archivo", nombre: `+${imgs.length - MINIS_GUARDADAS} imágenes` });
+    if (imgs.length > MINIS_GUARDADAS) adj.push({ tipo: "archivo", nombre: "+" + (imgs.length - MINIS_GUARDADAS) + " imágenes" });
     archivos.forEach((a) => adj.push({ tipo: "archivo", nombre: a.nombre }));
 
-    const chatId = ob.getChatActivoId() || ob.crearChat();
+    const chatId = ob.getChatActivoId() ?? ob.crearChat();
     const msg = ob.agregarMensaje(chatId, { rol: "usuario", texto: textoGuardado, adjuntos: adj });
     if (!msg) { toast("No se pudo guardar el mensaje."); return; }
 
@@ -1137,24 +1178,18 @@
       else { cerrarMenus(); cerrarPanel(); }
     });
 
-    // Mantiene la barra de entrada dentro del alto visible (también en iPhone).
+    // Mantiene la barra de entrada dentro del alto real (teclado, giro, apertura).
     if (global.visualViewport) {
       global.visualViewport.addEventListener("resize", ajustarAlto);
       global.visualViewport.addEventListener("scroll", ajustarAlto);
     }
     global.addEventListener("resize", ajustarAlto);
-    global.addEventListener("orientationchange", ajustarAlto);
+    global.addEventListener("orientationchange", () => setTimeout(ajustarAlto, 250));
     global.addEventListener("pageshow", ajustarAlto);
     global.addEventListener("load", ajustarAlto);
   }
 
   /* ============ INICIO ============ */
-  function ajustarAlto() {
-    const vv = global.visualViewport;
-    const h = Math.round(vv && vv.height ? vv.height : global.innerHeight);
-    if (h > 0 && $("app")) $("app").style.height = h + "px";
-    global.scrollTo(0, 0);
-  }
   ajustarAlto();
   requestAnimationFrame(ajustarAlto);
 
