@@ -1,5 +1,5 @@
-/* AI Bridge Lite - Consola de chat (Repo 2)  ·  PARTE 1 de 2
-   Ajustes, cuenta de Google, menús, panel lateral y estado. */
+/* AI Bridge Lite - Consola de chat PWA para gamers y creadores de videojuegos.
+   BYOK: la API Key vive solo en localStorage (ver onboarding.js). Sin backend. */
 (function (global) {
   "use strict";
 
@@ -12,15 +12,8 @@
     return;
   }
 
-  /* ============ AJUSTES DEL DESARROLLADOR (rellena cuando los tengas) ============ */
-  // URL de tu servidor proxy de la IA nativa. Recibe el payload JSON por POST y responde { "texto": "..." }.
-  const NATIVE_ENDPOINT = "";
-  // ID de cliente OAuth (Web) de Google Cloud para "Iniciar sesión con Google".
-  const GOOGLE_CLIENT_ID = "";
-
   const NS = "http://www.w3.org/2000/svg";
-  const NOMBRES = { gemini: "Gemini", claude: "Claude", openai: "OpenAI" };
-  const IDIOMA_IA = { es: "español", en: "inglés", pt: "portugués" };
+  const NOMBRES = ob.NOMBRES;
   const IDIOMA_VOZ = { es: "es-ES", en: "en-US", pt: "pt-BR" };
   const MIME = "image/jpeg";
   const MAX_LADO = 720;
@@ -33,21 +26,36 @@
   const MAX_BYTES_TEXTO = 200000;
   const MAX_CACHE = 6;
 
-  const SYSTEM = {
-    visual: "Analiza las capturas de un entorno de desarrollo de juegos 3D. Describe y sugiere mejoras visuales concretas.",
-    script: "Eres experto en scripting de juegos. Revisa el código dado y responde con código corregido y breve explicación.",
-    optimizacion: "Eres experto en optimización de juegos. Detecta cuellos de botella y propón mejoras medibles.",
-    hibrido: "Eres un asistente de desarrollo de juegos. Usa las capturas, el código y las propiedades del objeto para ayudar. Sé conciso."
+  // Atajos de un toque: plantilla que se inserta + enfoque que activan.
+  const ATAJOS = {
+    mecanica: {
+      enfoque: "mecanicas",
+      texto: "Estructura esta idea de mecánica para mi juego: objetivo, reglas, entradas y salidas, bucle de juego y casos límite.\n\nIdea: "
+    },
+    balanceo: {
+      enfoque: "balanceo",
+      texto: "Equilibra estos stats y costos. Propón una tabla con números y cómo probarlos:\n\n"
+    },
+    items: {
+      enfoque: "lore",
+      texto: "Crea 5 ítems con nombre, descripción corta, efecto y rareza. Tema o mundo: "
+    },
+    retos: {
+      enfoque: "retos",
+      texto: "Dame 5 ideas de retos o modos de partida con reglas simples, dificultad y recompensa. Juego: "
+    }
   };
 
-  /* ============ ESTADO COMPARTIDO ============ */
+  /* ============ ESTADO ============ */
   let pendientes = [];          // adjuntos por enviar
   let enviando = false;
-  let tokenEnvio = 0;           // invalida respuestas viejas al cancelar o cambiar de chat
   let abortActual = null;
+  let cancelado = false;
   let reconocimiento = null;    // dictado por voz
   let idLocal = 0;
-  const cacheEnvios = new Map(); // msgId -> { texto, frames[], archivos[] } (solo en memoria)
+  let chatEnviandoId = null;
+  let instalador = null;        // evento beforeinstallprompt
+  const cacheEnvios = new Map(); // msgId -> { texto, snippet, archivos[], imagenes[] } (solo en memoria)
 
   /* ============ UTILIDADES ============ */
   const nuevoId = () => "p" + (++idLocal) + Date.now().toString(36);
@@ -74,10 +82,36 @@
     el.className = "estado" + (clase ? " " + clase : "");
   }
 
-  const fechaCorta = (iso) => String(iso).split("-").reverse().slice(0, 2).join("/");
+  async function copiarTexto(t) {
+    try {
+      await global.navigator.clipboard.writeText(t);
+    } catch (_) {
+      const ta = document.createElement("textarea");
+      ta.value = t;
+      ta.style.cssText = "position:fixed;opacity:0;left:-9999px";
+      document.body.appendChild(ta);
+      ta.select();
+      try { document.execCommand("copy"); } catch (__) {}
+      document.body.removeChild(ta);
+    }
+  }
+
+  async function compartirTexto(t, titulo) {
+    if (!t) return;
+    if (global.navigator.share) {
+      try {
+        await global.navigator.share({ title: titulo || "AI Bridge Lite", text: t });
+        return;
+      } catch (e) {
+        if (e && e.name === "AbortError") return;
+      }
+    }
+    await copiarTexto(t);
+    toast("Copiado al portapapeles");
+  }
 
   /* ============ MENÚS EMERGENTES ============ */
-  const MENUS = [["btn-mas", "menu-chat"], ["btn-adjuntar", "menu-adjuntar"], ["btn-modo-flotante", "menu-flotante"]];
+  const MENUS = [["btn-mas", "menu-chat"], ["btn-adjuntar", "menu-adjuntar"]];
 
   function cerrarMenus(excepto) {
     MENUS.forEach(([b, m]) => {
@@ -96,7 +130,6 @@
   function abrirPanel() {
     cerrarMenus();
     renderLista();
-    renderCuenta();
     $("panel").classList.add("abierto");
     $("velo").classList.add("abierto");
     $("panel").setAttribute("aria-hidden", "false");
@@ -108,100 +141,70 @@
     $("panel").setAttribute("aria-hidden", "true");
   }
 
-  /* ============ CUENTA DE GOOGLE ============ */
-  function renderCuenta() {
-    const c = ob.getCuenta();
-    $("cuenta-nombre").textContent = c ? (c.nombre || c.email || "Cuenta") : "Invitado";
-    $("cuenta-estado").textContent = c ? (c.email || "Sesión iniciada") : "Sin sesión de Google";
-    $("txt-google").textContent = c ? "Cerrar sesión" : "Iniciar sesión con Google";
+  /* ============ INSTALAR (PWA) ============ */
+  const esStandalone = () =>
+    (global.matchMedia && global.matchMedia("(display-mode: standalone)").matches) ||
+    global.navigator.standalone === true;
+  const esIOS = () => /iphone|ipad|ipod/i.test(global.navigator.userAgent);
 
-    const av = $("cuenta-avatar");
-    av.textContent = "";
-    if (c && c.foto) {
-      const im = document.createElement("img");
-      im.src = c.foto;
-      im.alt = "";
-      im.referrerPolicy = "no-referrer";
-      im.onerror = () => { av.textContent = ""; av.appendChild(icono("user")); };
-      av.appendChild(im);
-    } else {
-      av.appendChild(icono("user"));
-    }
+  function renderInstalar() {
+    const mostrar = !esStandalone() && (!!instalador || esIOS());
+    $$(".js-instalar").forEach((b) => { b.hidden = !mostrar; });
   }
 
-  function decodificarJwt(token) {
-    try {
-      const b = String(token).split(".")[1].replace(/-/g, "+").replace(/_/g, "/");
-      const bin = atob(b + "=".repeat((4 - (b.length % 4)) % 4));
-      const bytes = Uint8Array.from(bin, (ch) => ch.charCodeAt(0));
-      return JSON.parse(new TextDecoder().decode(bytes));
-    } catch (_) {
-      return null;
-    }
-  }
-
-  function alRespuestaGoogle(resp) {
-    const d = decodificarJwt(resp && resp.credential);
-    if (!d) { toast("No se pudo iniciar sesión."); return; }
-    ob.setCuenta({ nombre: d.name || "", email: d.email || "", foto: d.picture || "" });
-    renderCuenta();
-    toast("Sesión iniciada");
-  }
-
-  function cargarGoogle() {
-    return new Promise((resolve, reject) => {
-      if (global.google && global.google.accounts) { resolve(); return; }
-      const s = document.createElement("script");
-      s.src = "https://accounts.google.com/gsi/client";
-      s.async = true;
-      s.onload = resolve;
-      s.onerror = () => reject(new Error("gsi"));
-      document.head.appendChild(s);
-    });
-  }
-
-  async function sesionGoogle() {
-    if (ob.getCuenta()) {
-      ob.cerrarSesion();
-      try { global.google.accounts.id.disableAutoSelect(); } catch (_) {}
-      renderCuenta();
-      toast("Sesión cerrada");
+  async function instalar() {
+    if (instalador) {
+      const ev = instalador;
+      instalador = null;
+      try {
+        ev.prompt();
+        await ev.userChoice;
+      } catch (_) {}
+      renderInstalar();
       return;
     }
-    if (!GOOGLE_CLIENT_ID) { toast("Falta configurar GOOGLE_CLIENT_ID en js/consola.js", 3500); return; }
-    try {
-      await cargarGoogle();
-      global.google.accounts.id.initialize({ client_id: GOOGLE_CLIENT_ID, callback: alRespuestaGoogle });
-      global.google.accounts.id.prompt();
-    } catch (_) {
-      toast("No se pudo cargar el inicio de sesión de Google.");
-    }
+    if (esIOS()) toast("En Safari toca Compartir y luego «Añadir a pantalla de inicio».", 4500);
+    else toast("Abre el menú del navegador y elige «Instalar app».", 3500);
   }
+
+  global.addEventListener("beforeinstallprompt", (e) => {
+    e.preventDefault();
+    instalador = e;
+    renderInstalar();
+  });
+  global.addEventListener("appinstalled", () => {
+    instalador = null;
+    renderInstalar();
+    toast("App instalada");
+  });
 
   /* ============ ESTADO DE LA IA (chip bajo el header) ============ */
   function renderEstado() {
-    const cfg = ob.getConfig();
+    const prov = ob.getConfig().proveedor_activo;
+    const modelo = ob.getModeloId(prov);
+    const key = ob.tieneKey(prov);
     const el = $("chip-estado");
-    let t, clase;
+    el.textContent = `${NOMBRES[prov]} · ${modelo || "sin modelo"} · ${key ? "key lista" : "sin API Key"}`;
+    el.className = "chip-estado " + (key && modelo ? "ok" : "alerta");
+  }
 
-    if (cfg.modo === "nativa") {
-      const u = ob.usoSemanal();
-      if (!NATIVE_ENDPOINT) {
-        t = "IA nativa no disponible · toca para usar tu API Key";
-        clase = "alerta";
-      } else {
-        t = `IA nativa · ${u.restantes}/${u.limite} esta semana`;
-        clase = u.restantes > 0 ? "ok" : "alerta";
-      }
-    } else {
-      const prov = cfg.proveedor_activo;
-      const modelo = ob.getModeloId(prov);
-      const lista = ob.tieneKey(prov) && !!modelo;
-      t = `${NOMBRES[prov]} · ${modelo || "sin modelo"} · ${ob.tieneKey(prov) ? "key lista" : "sin API Key"}`;
-      clase = lista ? "ok" : "alerta";
-    }
-    el.textContent = t;
-    el.className = "chip-estado " + clase;
+  /* ============ ENFOQUES Y ATAJOS ============ */
+  function renderEnfoques() {
+    const e = ob.getEnfoque();
+    $$("[data-enfoque]").forEach((c) => c.classList.toggle("active", c.dataset.enfoque === e));
+  }
+
+  function usarAtajo(id) {
+    const a = ATAJOS[id];
+    if (!a) return;
+    ob.setEnfoque(a.enfoque);
+    renderEnfoques();
+    const campo = $("entrada");
+    campo.value = (a.texto + campo.value).slice(0, ob.MAX_PROMPT);
+    autoajustar();
+    actualizarEnviar();
+    campo.focus();
+    campo.setSelectionRange(campo.value.length, campo.value.length);
   }
 
   /* ============ AJUSTES (modal) ============ */
@@ -219,27 +222,12 @@
     renderEstado();
   }
 
-  function renderUso() {
-    const u = ob.usoSemanal();
-    const rel = $("uso-relleno");
-    rel.style.width = u.porcentaje + "%";
-    rel.parentNode.classList.toggle("alta", u.porcentaje >= 80);
-    $("uso-texto").textContent =
-      `${u.usados} de ${u.limite} mensajes usados esta semana. Se reinicia el ${fechaCorta(u.reinicia)}.`;
-  }
-
   function renderAjustes() {
     const cfg = ob.getConfig();
     const prov = cfg.proveedor_activo;
 
-    $$("#seg-modo .seg-b").forEach((b) => b.classList.toggle("active", b.dataset.modo === cfg.modo));
-    $("bloque-nativa").hidden = cfg.modo !== "nativa";
-    $("bloque-byok").hidden = cfg.modo !== "byok";
-    renderUso();
-
     $("cfg-idioma").value = cfg.idioma;
-    $$(".chip[data-area]").forEach((c) => c.classList.toggle("active", cfg.areas.includes(c.dataset.area)));
-    $$(".chip[data-perfil]").forEach((c) => c.classList.toggle("active", c.dataset.perfil === cfg.perfil));
+    $("cfg-extra").value = cfg.extra;
     $$(".chip[data-proveedor]").forEach((c) => c.classList.toggle("active", c.dataset.proveedor === prov));
 
     const sel = $("cfg-modelo");
@@ -265,15 +253,13 @@
     $("cfg-key").type = "password";
     $("btn-ver-key").textContent = "VER";
     estadoKey();
-
-    $("plan-actual").textContent = "Plan actual: " + ob.getPlan().nombre;
   }
 
   function estadoKey() {
     const prov = ob.getConfig().proveedor_activo;
     const el = $("cfg-key-estado");
     if (ob.tieneKey(prov)) {
-      setEstado(el, `✔ Key de ${NOMBRES[prov]} guardada en este dispositivo.`, "ok");
+      setEstado(el, `✔ Key de ${NOMBRES[prov]} guardada solo en este navegador.`, "ok");
     } else {
       setEstado(el, `⚠ Aún no hay API Key de ${NOMBRES[prov]}. Pégala arriba y toca GUARDAR.`, "alerta");
     }
@@ -302,7 +288,6 @@
     $("btn-menu").addEventListener("click", abrirPanel);
     $("btn-panel-cerrar").addEventListener("click", cerrarPanel);
     $("velo").addEventListener("click", cerrarPanel);
-    $("btn-google").addEventListener("click", sesionGoogle);
 
     $("btn-ajustes").addEventListener("click", () => abrirAjustes(false));
     $("chip-estado").addEventListener("click", () => abrirAjustes(false));
@@ -310,14 +295,8 @@
     $("btn-ajustes-listo").addEventListener("click", cerrarAjustes);
     $("modal-ajustes").addEventListener("click", (e) => { if (e.target === $("modal-ajustes")) cerrarAjustes(); });
 
-    $$("#seg-modo .seg-b").forEach((b) =>
-      b.addEventListener("click", () => { ob.setModo(b.dataset.modo); renderAjustes(); renderEstado(); }));
-
     $("cfg-idioma").addEventListener("change", (e) => ob.setIdioma(e.target.value));
-    $$(".chip[data-area]").forEach((c) =>
-      c.addEventListener("click", () => { ob.toggleArea(c.dataset.area); renderAjustes(); }));
-    $$(".chip[data-perfil]").forEach((c) =>
-      c.addEventListener("click", () => { ob.setPerfil(c.dataset.perfil); renderAjustes(); }));
+    $("cfg-extra").addEventListener("input", (e) => ob.setExtra(e.target.value));
     $$(".chip[data-proveedor]").forEach((c) =>
       c.addEventListener("click", () => { ob.setProveedorActivo(c.dataset.proveedor); renderAjustes(); renderEstado(); }));
 
@@ -347,8 +326,6 @@
       renderEstado();
     });
   }
-
-    /* ===== PARTE 2 de 2 ===== */
 
   /* ============ IMÁGENES ============ */
   function cargarImg(src) {
@@ -552,38 +529,7 @@
     }
   }
 
-  /* ============ COPIAR Y COMPARTIR ============ */
-  async function copiarTexto(t) {
-    try {
-      await global.navigator.clipboard.writeText(t);
-    } catch (_) {
-      const ta = document.createElement("textarea");
-      ta.value = t;
-      ta.style.cssText = "position:fixed;opacity:0;left:-9999px";
-      document.body.appendChild(ta);
-      ta.select();
-      try { document.execCommand("copy"); } catch (__) {}
-      document.body.removeChild(ta);
-    }
-  }
-
-  async function compartirTexto(t, titulo) {
-    if (!t) return;
-    if (global.navigator.share) {
-      try {
-        await global.navigator.share({ title: titulo || "AI Bridge Lite", text: t });
-        return;
-      } catch (e) {
-        if (e && e.name === "AbortError") return;
-      }
-    }
-    await copiarTexto(t);
-    toast("Copiado al portapapeles");
-  }
-
   /* ============ RENDER DE MENSAJES ============ */
-  let chatEnviandoId = null;
-
   function bajar() {
     const c = $("chat");
     c.scrollTop = c.scrollHeight;
@@ -703,6 +649,10 @@
     like.addEventListener("click", () => votar("like"));
     dislike.addEventListener("click", () => votar("dislike"));
     barra.append(like, dislike);
+
+    const copiar = botonAccion("copy", "Copiar respuesta");
+    copiar.addEventListener("click", async () => { await copiarTexto(m.texto); toast("Respuesta copiada"); });
+    barra.appendChild(copiar);
 
     if (esUltimo) {
       const regen = botonAccion("refresh", "Regenerar respuesta");
@@ -862,6 +812,21 @@
     toast("Chat borrado");
   }
 
+  async function copiarChat() {
+    const id = ob.getChatActivoId();
+    cerrarMenus();
+    const t = id ? ob.chatATexto(id) : "";
+    if (!t) { toast("No hay nada que copiar."); return; }
+    await copiarTexto(t);
+    toast("Chat copiado");
+  }
+
+  async function copiarConfig() {
+    cerrarMenus();
+    await copiarTexto(ob.configATexto());
+    toast("Configuración copiada (sin tu API Key)");
+  }
+
   function compartirChat() {
     const id = ob.getChatActivoId();
     cerrarMenus();
@@ -871,8 +836,6 @@
   }
 
   /* ============ LLAMADAS A LA IA ============ */
-  let cancelado = false;
-
   function construirTexto(p) {
     let t = p.prompt_intencion;
     if (p.script_snippet) t += "\n\n[CÓDIGO]\n" + p.script_snippet;
@@ -895,13 +858,13 @@
 
   function armarPeticion(prov, key, modelo, system, p) {
     const turnos = turnosDe(p);
-    const frames = p.modo_secuencia_frames || [];
+    const imgs = p.imagenes || [];
     const ult = turnos.length - 1;
 
     if (prov === "gemini") {
       const contents = turnos.map((t, i) => {
         const parts = [{ text: t.texto }];
-        if (i === ult) frames.forEach((d) => parts.push({ inlineData: { mimeType: MIME, data: d } }));
+        if (i === ult) imgs.forEach((d) => parts.push({ inlineData: { mimeType: MIME, data: d } }));
         return { role: t.rol === "ia" ? "model" : "user", parts };
       });
       const id = encodeURIComponent(modelo.replace(/^models\//, ""));
@@ -919,7 +882,7 @@
     if (prov === "claude") {
       const messages = turnos.map((t, i) => {
         if (i !== ult) return { role: t.rol === "ia" ? "assistant" : "user", content: t.texto };
-        const content = frames.map((d) => ({ type: "image", source: { type: "base64", media_type: MIME, data: d } }));
+        const content = imgs.map((d) => ({ type: "image", source: { type: "base64", media_type: MIME, data: d } }));
         content.push({ type: "text", text: t.texto });
         return { role: "user", content };
       });
@@ -938,7 +901,7 @@
     turnos.forEach((t, i) => {
       if (i !== ult) { messages.push({ role: t.rol === "ia" ? "assistant" : "user", content: t.texto }); return; }
       const content = [{ type: "text", text: t.texto }];
-      frames.forEach((d) => content.push({ type: "image_url", image_url: { url: `data:${MIME};base64,${d}` } }));
+      imgs.forEach((d) => content.push({ type: "image_url", image_url: { url: `data:${MIME};base64,${d}` } }));
       messages.push({ role: "user", content });
     });
     return {
@@ -949,7 +912,6 @@
   }
 
   function parsearRespuesta(prov, data) {
-    if (prov === "nativa") return data.texto || data.text || "";
     if (prov === "gemini") {
       const parts = (data.candidates && data.candidates[0] && data.candidates[0].content &&
         data.candidates[0].content.parts) || [];
@@ -979,23 +941,9 @@
     return detalle ? `${base}\n${detalle}` : base;
   }
 
-  async function llamarIA(cfg, payload, signal) {
-    let req, prov;
-    if (cfg.modo === "nativa") {
-      prov = "nativa";
-      req = {
-        url: NATIVE_ENDPOINT,
-        headers: {},
-        body: Object.assign({}, payload, { idioma: cfg.idioma, areas: cfg.areas })
-      };
-    } else {
-      prov = payload.proveedor;
-      let system = SYSTEM[payload.perfil_seleccionado] || SYSTEM.hibrido;
-      system += ` Responde en ${IDIOMA_IA[cfg.idioma] || "español"}.`;
-      system += " Entrega el código dentro de bloques ``` indicando el lenguaje.";
-      if (cfg.areas.length) system += ` Áreas de enfoque del usuario: ${cfg.areas.join(", ")}.`;
-      req = armarPeticion(prov, payload.api_key_usuario, ob.getModeloId(prov), system, payload);
-    }
+  async function llamarIA(payload, signal) {
+    const prov = payload.proveedor;
+    const req = armarPeticion(prov, payload.api_key_usuario, ob.getModeloId(prov), ob.buildSystem(), payload);
 
     let resp;
     try {
@@ -1023,20 +971,9 @@
 
   /* ============ ENVÍO ============ */
   function verificarListo() {
-    const cfg = ob.getConfig();
-    if (cfg.modo === "nativa" && !NATIVE_ENDPOINT) {
-      toast("La IA nativa aún no está conectada. Usa tu API Key en Ajustes.", 3500);
-      abrirAjustes(false);
-      return false;
-    }
     const l = ob.listoParaEnviar();
     if (l.ok) return true;
-    const t = {
-      limite: "Llegaste al límite semanal de la IA nativa. Usa tu API Key o espera al lunes.",
-      sin_key: "Falta tu API Key. Configúrala en Ajustes.",
-      sin_modelo: "Elige un modelo en Ajustes."
-    }[l.motivo];
-    toast(t, 3500);
+    toast(l.motivo === "sin_key" ? "Falta tu API Key. Pégala en Ajustes." : "Elige un modelo en Ajustes.", 3500);
     abrirAjustes(false);
     return false;
   }
@@ -1054,7 +991,6 @@
     const idx = chat.mensajes.findIndex((m) => m.id === msgId);
     if (idx === -1) return;
     const msg = chat.mensajes[idx];
-    const cfg = ob.getConfig();
 
     const historial = chat.mensajes.slice(0, idx)
       .filter((m) => !m.error)
@@ -1062,16 +998,15 @@
 
     let datos = cacheEnvios.get(msgId);
     if (!datos) {
-      datos = { texto: msg.texto, snippet: "", archivos: [], frames: [] };
+      datos = { texto: msg.texto, snippet: "", archivos: [], imagenes: [] };
       if (msg.adjuntos.length) toast("Los adjuntos no se conservan al cerrar la app; se reenvía solo el texto.", 3500);
     }
 
     const payload = ob.buildPayload({
-      perfil_seleccionado: cfg.perfil,
       prompt_intencion: datos.texto || "Analiza los adjuntos.",
       script_snippet: datos.snippet,
       archivos: datos.archivos,
-      modo_secuencia_frames: datos.frames,
+      imagenes: datos.imagenes,
       historial
     });
     if (!payload) { toast("No se pudo preparar la consulta."); renderMensajes(); return; }
@@ -1079,20 +1014,16 @@
     enviando = true;
     cancelado = false;
     chatEnviandoId = chatId;
-    if (cfg.modo === "nativa") ob.registrarUsoNativa(1);
     actualizarEnviar();
-    renderEstado();
     renderMensajes();
 
     const ctrl = new AbortController();
     abortActual = ctrl;
     const timer = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
-    let ok = false;
 
     try {
-      const texto = await llamarIA(cfg, payload, ctrl.signal);
+      const texto = await llamarIA(payload, ctrl.signal);
       ob.agregarMensaje(chatId, { rol: "ia", texto });
-      ok = true;
     } catch (e) {
       if (!cancelado) ob.agregarMensaje(chatId, { rol: "ia", texto: "⚠ " + e.message, error: true });
     } finally {
@@ -1100,9 +1031,7 @@
       abortActual = null;
       enviando = false;
       chatEnviandoId = null;
-      if (!ok && cfg.modo === "nativa") ob.devolverUsoNativa(1);
       actualizarEnviar();
-      renderEstado();
       if (ob.getChatActivoId() === chatId) renderMensajes();
     }
   }
@@ -1118,7 +1047,7 @@
     cerrarPanel();
 
     const imgs = imagenesPendientes();
-    const frames = imgs.map((a) => a.dataUrl.slice(a.dataUrl.indexOf(",") + 1));
+    const imagenes = imgs.map((a) => a.dataUrl.slice(a.dataUrl.indexOf(",") + 1));
     const codigos = pendientes.filter((a) => a.tipo === "codigo");
     const archivos = pendientes.filter((a) => a.tipo === "archivo").map((a) => ({ nombre: a.nombre, texto: a.texto }));
     const snippet = codigos.map((c) => `[${c.nombre}]\n${c.texto}`).join("\n\n");
@@ -1135,7 +1064,7 @@
     const msg = ob.agregarMensaje(chatId, { rol: "usuario", texto: textoGuardado, adjuntos: adj });
     if (!msg) { toast("No se pudo guardar el mensaje."); return; }
 
-    cacheEnvios.set(msg.id, { texto, snippet, archivos, frames });
+    cacheEnvios.set(msg.id, { texto, snippet, archivos, imagenes });
     while (cacheEnvios.size > MAX_CACHE) cacheEnvios.delete(cacheEnvios.keys().next().value);
 
     $("entrada").value = "";
@@ -1164,44 +1093,6 @@
     responder(id, ult.id);
   }
 
-  /* ============ MODO FLOTANTE "AI" ============ */
-  function renderModoCaptura() {
-    const m = ob.getModoCaptura();
-    $$("[data-modo-captura]").forEach((b) => b.classList.toggle("active", b.dataset.modoCaptura === m));
-  }
-
-  function elegirModoCaptura(modo) {
-    ob.setModoCaptura(modo);
-    renderModoCaptura();
-    cerrarMenus();
-
-    // Gancho para la app Android nativa (se conectará en el paso del botón flotante).
-    const nativo = global.AIBridgeNative || global.AndroidBridge;
-    if (nativo && typeof nativo.iniciarFlotante === "function") {
-      try { nativo.iniciarFlotante(modo); return; } catch (_) {}
-    }
-    toast(`${modo === "multi" ? "Multi-Captura" : "Captura"} seleccionado. El botón flotante sobre otras apps requiere la app Android.`, 3800);
-  }
-
-  // La app nativa llama a esto para entregar las capturas al chat (data URL o base64).
-  async function recibirCapturas(lista) {
-    const arr = Array.isArray(lista) ? lista : [lista];
-    let libres = ob.limiteImagenes() - imagenesPendientes().length;
-    for (const s of arr) {
-      if (libres <= 0) break;
-      if (typeof s !== "string" || !s) continue;
-      const src = s.startsWith("data:") ? s : "data:image/png;base64," + s;
-      try {
-        const r = await procesarImagen(src);
-        pendientes.push({ id: nuevoId(), tipo: "imagen", nombre: "captura", dataUrl: r.dataUrl, mini: r.mini });
-        libres--;
-      } catch (_) {}
-    }
-    renderAdjuntos();
-    toast("Capturas listas para enviar");
-  }
-  global.AIBridgeApp = { recibirCapturas };
-
   /* ============ EVENTOS ============ */
   function enlazarChat() {
     const entrada = $("entrada");
@@ -1226,8 +1117,16 @@
       alternarMenu("btn-mas", "menu-chat");
     });
     $("btn-fijar").addEventListener("click", fijarChat);
+    $("btn-copiar-chat").addEventListener("click", copiarChat);
+    $("btn-copiar-config").addEventListener("click", copiarConfig);
     $("btn-compartir-chat").addEventListener("click", compartirChat);
     $("btn-borrar-chat").addEventListener("click", borrarChat);
+
+    $$("[data-enfoque]").forEach((c) =>
+      c.addEventListener("click", () => { ob.setEnfoque(c.dataset.enfoque); renderEnfoques(); }));
+    $$("[data-atajo]").forEach((c) =>
+      c.addEventListener("click", () => usarAtajo(c.dataset.atajo)));
+    $$(".js-instalar").forEach((b) => b.addEventListener("click", instalar));
 
     $("btn-adjuntar").addEventListener("click", () => alternarMenu("btn-adjuntar", "menu-adjuntar"));
     $("btn-adj-imagen").addEventListener("click", () => { cerrarMenus(); $("file-imagenes").click(); });
@@ -1247,10 +1146,6 @@
     $("btn-codigo-cancelar").addEventListener("click", cerrarCodigo);
     $("btn-codigo-x").addEventListener("click", cerrarCodigo);
     $("modal-codigo").addEventListener("click", (e) => { if (e.target === $("modal-codigo")) cerrarCodigo(); });
-
-    $("btn-modo-flotante").addEventListener("click", () => alternarMenu("btn-modo-flotante", "menu-flotante"));
-    $$("[data-modo-captura]").forEach((b) =>
-      b.addEventListener("click", () => elegirModoCaptura(b.dataset.modoCaptura)));
 
     $("visor-cerrar").addEventListener("click", cerrarVisor);
     $("visor").addEventListener("click", (e) => { if (e.target === $("visor")) cerrarVisor(); });
@@ -1278,9 +1173,9 @@
   /* ============ INICIO ============ */
   enlazarAjustes();
   enlazarChat();
-  renderModoCaptura();
+  renderEnfoques();
   renderEstado();
-  renderCuenta();
+  renderInstalar();
   renderMensajes();
   renderAdjuntos();
   autoajustar();
@@ -1291,7 +1186,7 @@
     });
   }
 
-  // Primera vez: abre Ajustes para elegir motor (puede empezar con la IA nativa).
-  if (!ob.isDone()) abrirAjustes(true);
+  // Primera vez sin API Key: abre Ajustes para pegarla.
+  if (!ob.isDone() && !ob.tieneKey()) abrirAjustes(true);
 
 })(window);
