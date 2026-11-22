@@ -162,7 +162,8 @@
           callback: alRespuesta,
           auto_select: false,
           cancel_on_tap_outside: true,
-          use_fedcm_for_prompt: true
+                    use_fedcm_for_prompt: true,
+          use_fedcm_for_button: true
         });
         gisIniciado = true;
       }
