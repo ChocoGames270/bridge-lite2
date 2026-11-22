@@ -3,7 +3,7 @@
    Sube CACHE_VERSION cada vez que cambies archivos de la web. */
 "use strict";
 
-const CACHE_VERSION = "v5";
+const CACHE_VERSION = "v6";
 const CACHE_NAME = "aibl-cache-" + CACHE_VERSION;
 
 const ARCHIVOS = [
@@ -13,6 +13,7 @@ const ARCHIVOS = [
   "css/chat.css",
   "js/onboarding.js",
   "js/consola.js",
+  "js/cuenta.js",
   "icons/icon-192.png",
   "icons/icon-512.png"
 ];
@@ -50,7 +51,7 @@ self.addEventListener("activate", (event) => {
 });
 
 // Peticiones: caché primero y actualiza de fondo.
-// Solo archivos propios (GET). Las llamadas a las APIs de IA NUNCA se tocan.
+// Solo archivos propios (GET). Google (accounts.google.com) y las APIs de IA NUNCA se tocan.
 self.addEventListener("fetch", (event) => {
   const req = event.request;
   if (req.method !== "GET") return;
