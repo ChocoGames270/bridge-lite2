@@ -39,6 +39,7 @@
     <symbol id="i-chevron" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></symbol>
     <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></symbol>
     <symbol id="i-cfg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1"/></symbol>
+    <symbol id="i-logout" viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></symbol>
   </svg>
 
   <div id="app">
@@ -149,6 +150,25 @@
     <nav id="lista-chats" class="lista-chats" aria-label="Historial de chats"></nav>
 
     <div class="panel-pie">
+      <section id="cuenta" class="cuenta" aria-label="Cuenta">
+        <div id="cuenta-invitado">
+          <p class="cuenta-nota">Inicia sesión con Google</p>
+          <div id="g-boton" class="g-boton"></div>
+          <p id="cuenta-aviso" class="estado alerta" role="status" hidden></p>
+        </div>
+        <div id="cuenta-perfil" class="cuenta-perfil" hidden>
+          <div class="cuenta-tarjeta">
+            <div id="cuenta-avatar" class="avatar" aria-hidden="true"></div>
+            <div class="cuenta-datos">
+              <strong id="cuenta-nombre"></strong>
+              <small id="cuenta-email"></small>
+            </div>
+          </div>
+          <button type="button" class="panel-btn" id="btn-cerrar-sesion">
+            <svg class="ic"><use href="#i-logout"/></svg><span>Cerrar sesión</span>
+          </button>
+        </div>
+      </section>
       <button type="button" class="panel-btn js-instalar" id="btn-instalar" hidden>
         <svg class="ic"><use href="#i-download"/></svg><span>Instalar app</span>
       </button>
@@ -243,5 +263,6 @@
   <!-- onboarding.js debe cargarse ANTES de consola.js -->
   <script src="js/onboarding.js?v=3"></script>
   <script src="js/consola.js?v=3"></script>
+  <script src="js/cuenta.js?v=1"></script>
 </body>
-          </html>
+</html>
