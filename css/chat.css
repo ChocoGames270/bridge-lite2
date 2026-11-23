@@ -633,3 +633,72 @@ select:focus, input[type="text"]:focus, input[type="password"]:focus, .hoja text
 }
 
 #btn-cerrar-sesion, #btn-cerrar-sesion .ic { color: var(--accent-secondary); }
+
+/* ================= EXPORTAR CONCIENCIA ================= */
+.cupo {
+  margin: 8px 0 4px;
+  padding: 10px 12px;
+  font-size: 0.88rem;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+  color: var(--accent-color);
+  background: var(--bg-input);
+  border: 1px solid var(--border-color);
+  border-left: 3px solid var(--accent-secondary);
+  border-radius: var(--radius-sm);
+  text-shadow: 0 0 6px var(--accent-glow);
+}
+.cupo.agotado { color: var(--accent-secondary); text-shadow: none; }
+
+.previa {
+  max-height: 200px;
+  margin-bottom: 10px;
+  padding: 10px;
+  overflow: auto;
+  font-size: 0.74rem;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  color: var(--text-main);
+  background: var(--bg-input);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+.bloqueo {
+  margin-top: 6px;
+  padding: 10px;
+  border: 1px dashed var(--accent-secondary);
+  border-radius: var(--radius-md);
+}
+.bloqueo .fila { flex-wrap: wrap; }
+.bloqueo .chip { flex: 1 1 100%; text-align: center; }
+
+.video-slot {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  min-height: 180px;
+  padding: 16px;
+  text-align: center;
+  color: var(--text-muted);
+  background: var(--bg-input);
+  border: 1px solid var(--accent-color);
+  border-radius: var(--radius-md);
+  box-shadow: inset 0 0 18px rgba(0, 255, 204, 0.1);
+}
+.video-cuenta {
+  width: 72px; height: 72px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 2rem; font-weight: 800;
+  color: var(--accent-color);
+  border: 2px solid var(--accent-color);
+  border-radius: 50%;
+  box-shadow: 0 0 16px var(--accent-glow);
+  text-shadow: 0 0 10px var(--accent-glow);
+}
+.video-cuenta.listo { color: var(--accent-secondary); border-color: var(--accent-secondary); box-shadow: 0 0 16px rgba(255, 0, 127, 0.5); }
