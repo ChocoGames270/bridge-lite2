@@ -26,6 +26,8 @@
   const TIMEOUT_MS = 90000;
   const MAX_BYTES_TEXTO = 200000;
   const MAX_CACHE = 6;
+  const SEGUNDOS_VIDEO = 5;
+  const ARCHIVO_CONCIENCIA = "ai-bridge-lite-conciencia.json";
 
   // Atajos de un toque: plantilla que se inserta + enfoque que activan.
   const ATAJOS = {
@@ -56,6 +58,8 @@
   let idLocal = 0;
   let chatEnviandoId = null;
   let instalador = null;        // evento beforeinstallprompt
+  let exportando = false;       // evita doble toque al exportar
+  let timerVideo = null;        // cuenta regresiva del video simulado
   const cacheEnvios = new Map(); // msgId -> { texto, snippet, archivos[], imagenes[] } (solo en memoria)
 
   /* ============ UTILIDADES ============ */
@@ -216,6 +220,144 @@
     actualizarEnviar();
     campo.focus();
     campo.setSelectionRange(campo.value.length, campo.value.length);
+  }
+
+  /* ============ EXPORTAR CONCIENCIA ============ */
+  function textoCupo(e) {
+    if (e.ilimitado) return "Exportaciones ilimitadas (Supporter)";
+    return "Restantes: " + e.base_restantes + "/" + e.base_total + " semanales + " + e.extras_disponibles + " extra";
+  }
+
+  function textoReinicio(e) {
+    if (e.ilimitado) return "";
+    const d = e.dias_para_reinicio;
+    return "Reinicio semanal en " + d + (d === 1 ? " día" : " días") + ". Extras por video: " + e.extras_ganados + "/" + e.extras_max + ".";
+  }
+
+  function resumenQuedan(e) {
+    return e.ilimitado ? "ilimitadas" : "quedan " + e.total_disponibles;
+  }
+
+  function renderExportar() {
+    const e = ob.getExportEstado();
+    const cupo = $("exportar-cupo");
+    cupo.textContent = textoCupo(e);
+    cupo.classList.toggle("agotado", !e.puede_exportar);
+    $("exportar-reinicio").textContent = textoReinicio(e);
+    $("exportar-previa").textContent = ob.conscienciaAJSON();
+    $("exportar-bloqueo").hidden = e.puede_exportar;
+    $("btn-exportar-video").hidden = !e.puede_ver_video;
+    $("btn-exportar-copiar").disabled = !e.puede_exportar;
+    $("btn-exportar-descargar").disabled = !e.puede_exportar;
+  }
+
+  function abrirExportar() {
+    cerrarMenus();
+    cerrarPanel();
+    renderExportar();
+    $("modal-exportar").hidden = false;
+  }
+
+  function cerrarExportar() {
+    $("modal-exportar").hidden = true;
+  }
+
+  function descargarArchivo(contenido) {
+    const blob = new Blob([contenido], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = ARCHIVO_CONCIENCIA;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 4000);
+  }
+
+  // Solo descuenta 1 exportación si la acción (copiar o descargar) se ejecutó sin errores.
+  async function exportar(modo) {
+    if (exportando) return;
+    if (!ob.getExportEstado().puede_exportar) {
+      renderExportar();
+      toast("Sin exportaciones disponibles. Mira un video opcional o hazte Supporter.", 3500);
+      return;
+    }
+    exportando = true;
+    try {
+      const json = ob.conscienciaAJSON();
+      if (modo === "copiar") await copiarTexto(json);
+      else descargarArchivo(json);
+      const r = ob.consumirExportacion();
+      renderExportar();
+      const que = modo === "copiar" ? "JSON copiado" : "Archivo descargado";
+      toast(que + " · " + resumenQuedan(r.estado), 3000);
+    } catch (_) {
+      toast("No se pudo exportar. No se descontó ninguna exportación.", 3500);
+    } finally {
+      exportando = false;
+    }
+  }
+
+  function pedirSupporter() {
+    toast("Supporter (exportaciones ilimitadas): próximamente.", 3200);
+  }
+
+  /* ---------- Video opcional (simulado) ---------- */
+  // Gancho: para conectar un proveedor de anuncios, reemplaza iniciarCuenta() por el reproductor
+  // dentro de #video-slot y llama a reclamarVideo() solo cuando el video termine por completo.
+  function detenerCuenta() {
+    if (timerVideo) {
+      clearInterval(timerVideo);
+      timerVideo = null;
+    }
+  }
+
+  function iniciarCuenta() {
+    detenerCuenta();
+    let resta = SEGUNDOS_VIDEO;
+    const cuenta = $("video-cuenta");
+    const btn = $("btn-video-ok");
+    cuenta.textContent = String(resta);
+    cuenta.classList.remove("listo");
+    btn.disabled = true;
+    btn.textContent = "ESPERA...";
+    setEstado($("video-estado"), "Simulación: espera a que termine para ganar +1 exportación extra.", "");
+    timerVideo = setInterval(() => {
+      resta -= 1;
+      if (resta > 0) {
+        cuenta.textContent = String(resta);
+        return;
+      }
+      detenerCuenta();
+      cuenta.textContent = "✔";
+      cuenta.classList.add("listo");
+      btn.disabled = false;
+      btn.textContent = "RECLAMAR +1 EXPORTACIÓN";
+      setEstado($("video-estado"), "¡Video completado!", "ok");
+    }, 1000);
+  }
+
+  function abrirVideo() {
+    if (!ob.getExportEstado().puede_ver_video) {
+      renderExportar();
+      toast("Ya alcanzaste el máximo de extras de esta semana.", 3000);
+      return;
+    }
+    $("modal-video").hidden = false;
+    iniciarCuenta();
+  }
+
+  function cerrarVideo() {
+    detenerCuenta();
+    $("modal-video").hidden = true;
+  }
+
+  function reclamarVideo() {
+    const r = ob.sumarExtraPorVideo();
+    cerrarVideo();
+    if (r.ok) toast("+1 exportación extra", 2500);
+    else toast(r.motivo === "tope" ? "Máximo de extras alcanzado." : "No disponible ahora.", 3000);
+    renderExportar();
   }
 
   /* ============ AJUSTES (modal) ============ */
@@ -1108,7 +1250,8 @@
       msgs.pop();
       ult = msgs[msgs.length - 1];
     }
-    if (!ult || ult.rol !== "usuario") { renderMensajes(); return; }
+    if (!ult) { renderMensajes(); return; }
+    if (ult.rol !== "usuario") { renderMensajes(); return; }
     responder(id, ult.id);
   }
 
@@ -1138,8 +1281,20 @@
     $("btn-fijar").addEventListener("click", fijarChat);
     $("btn-copiar-chat").addEventListener("click", copiarChat);
     $("btn-copiar-config").addEventListener("click", copiarConfig);
+    $("btn-exportar").addEventListener("click", abrirExportar);
     $("btn-compartir-chat").addEventListener("click", compartirChat);
     $("btn-borrar-chat").addEventListener("click", borrarChat);
+
+    $("btn-exportar-x").addEventListener("click", cerrarExportar);
+    $("modal-exportar").addEventListener("click", (e) => { if (e.target === $("modal-exportar")) cerrarExportar(); });
+    $("btn-exportar-copiar").addEventListener("click", () => exportar("copiar"));
+    $("btn-exportar-descargar").addEventListener("click", () => exportar("descargar"));
+    $("btn-exportar-video").addEventListener("click", abrirVideo);
+    $("btn-exportar-supporter").addEventListener("click", pedirSupporter);
+
+    $("btn-video-x").addEventListener("click", cerrarVideo);
+    $("modal-video").addEventListener("click", (e) => { if (e.target === $("modal-video")) cerrarVideo(); });
+    $("btn-video-ok").addEventListener("click", reclamarVideo);
 
     $$("[data-enfoque]").forEach((c) =>
       c.addEventListener("click", () => { ob.setEnfoque(c.dataset.enfoque); renderEnfoques(); }));
@@ -1173,6 +1328,8 @@
     document.addEventListener("keydown", (e) => {
       if (e.key !== "Escape") return;
       if (!$("visor").hidden) cerrarVisor();
+      else if (!$("modal-video").hidden) cerrarVideo();
+      else if (!$("modal-exportar").hidden) cerrarExportar();
       else if (!$("modal-codigo").hidden) cerrarCodigo();
       else if (!$("modal-ajustes").hidden) cerrarAjustes();
       else { cerrarMenus(); cerrarPanel(); }
