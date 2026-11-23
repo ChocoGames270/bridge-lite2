@@ -1,10 +1,11 @@
-/* AI Bridge Lite - Configuración, enfoques, prompt base y chats
+/* AI Bridge Lite - Configuración, enfoques, prompt base, chats y exportador de conciencia
    Todo vive en localStorage (con respaldo en memoria). Expone window.AIBridgeOnboarding. */
 (function (global) {
   "use strict";
 
   const KEY = "aibl_config_v1";        // misma clave: conserva las API Keys ya guardadas
   const KEY_CHATS = "aibl_chats_v1";
+  const KEY_EXPORT = "aibl_export_v1"; // cupo de exportaciones (no se borra con reset)
   const MIN_KEY = 10;
   const OTRO = "__otro__";
 
@@ -17,6 +18,12 @@
   const MAX_CHATS = 60;
   const MAX_MENSAJES = 200;
   const TITULO_NUEVO = "Chat nuevo";
+
+  const EXPORT_BASE = 5;                       // exportaciones gratis por semana
+  const EXPORT_EXTRAS_MAX = 3;                 // extras por video, máximo por ciclo
+  const CICLO_MS = 7 * 24 * 60 * 60 * 1000;    // 7 días
+  const DIA_MS = 24 * 60 * 60 * 1000;
+  const VERSION_CONCIENCIA = "1.0";
 
   const F = "\x60\x60\x60"; // tres comillas invertidas (bloque de código)
 
@@ -84,6 +91,7 @@
   const texto = (v) => (typeof v === "string" ? v : "");
   const valor = (v, defecto) => (v ? v : defecto);
   const esObjeto = (v) => (v !== null && typeof v === "object");
+  const entero = (v, min, max) => (Number.isFinite(v) ? Math.min(max, Math.max(min, Math.floor(v))) : min);
   const nuevoId = () =>
     (global.crypto && global.crypto.randomUUID)
       ? global.crypto.randomUUID()
@@ -157,6 +165,69 @@
   const limpiarKey = (v) =>
     texto(v).replace(/\s+/g, "").replace(/^["']+/, "").replace(/["']+$/, "");
   const provValido = (p) => PROVEEDORES.includes(p);
+
+  /* ================= CUPO DE EXPORTACIONES ================= */
+  // Estado: inicio del ciclo semanal, base usada, extras ganados/usados y supporter.
+  let expo = null;
+  let memoriaExpo = null;
+
+  function nuevoExpo(ahora) {
+    return { ciclo_inicio: ahora, base_usadas: 0, extras_ganados: 0, extras_usados: 0, supporter: false };
+  }
+
+  function normalizarExpo(d) {
+    const ahora = Date.now();
+    const e = nuevoExpo(ahora);
+    if (!esObjeto(d)) return e;
+    e.ciclo_inicio = Number.isFinite(d.ciclo_inicio) ? d.ciclo_inicio : ahora;
+    e.base_usadas = entero(d.base_usadas, 0, EXPORT_BASE);
+    e.extras_ganados = entero(d.extras_ganados, 0, EXPORT_EXTRAS_MAX);
+    e.extras_usados = entero(d.extras_usados, 0, e.extras_ganados);
+    e.supporter = d.supporter === true;
+    return e;
+  }
+
+  function guardarExpo() {
+    memoriaExpo = clone(expo);
+    try {
+      global.localStorage.setItem(KEY_EXPORT, JSON.stringify(expo));
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  // Reinicio automático a los 7 días. Si el reloj se atrasó, solo reajusta el inicio.
+  function refrescarCiclo(e) {
+    const ahora = Date.now();
+    if (e.ciclo_inicio > ahora) {
+      e.ciclo_inicio = ahora;
+      guardarExpo();
+      return;
+    }
+    if (ahora - e.ciclo_inicio >= CICLO_MS) {
+      e.ciclo_inicio = ahora;
+      e.base_usadas = 0;
+      e.extras_ganados = 0;
+      e.extras_usados = 0;
+      guardarExpo();
+    }
+  }
+
+  function estadoExpo() {
+    if (!expo) {
+      let raw = null;
+      try {
+        raw = JSON.parse(global.localStorage.getItem(KEY_EXPORT));
+      } catch (_) {
+        raw = memoriaExpo ? clone(memoriaExpo) : null;
+      }
+      expo = normalizarExpo(raw);
+      if (!esObjeto(raw)) guardarExpo(); // primer uso: fija el inicio del ciclo
+    }
+    refrescarCiclo(expo);
+    return expo;
+  }
 
   /* ================= CHATS ================= */
   let chatsData = null;
@@ -285,6 +356,7 @@
   const API = {
     MIN_KEY, OTRO, IDIOMAS, PROVEEDORES, NOMBRES, ENFOQUES, ENFOQUE_NOMBRE,
     MAX_IMAGENES, MAX_PROMPT, MAX_SNIPPET, MAX_EXTRA, TITULO_NUEVO,
+    EXPORT_BASE, EXPORT_EXTRAS_MAX,
 
     getConfig: () => clone(cfg),
     isDone: () => cfg.completado === true,
@@ -331,6 +403,102 @@
         "System Prompt:",
         API.buildSystem()
       ].join("\n");
+    },
+
+    /* ----- Conciencia exportable (para un juego o un bot). Jamás incluye la API Key. ----- */
+    construirConciencia() {
+      const p = cfg.proveedor_activo;
+      return {
+        version: VERSION_CONCIENCIA,
+        nombre: "AI Bridge Lite",
+        rol: "Copiloto de IA para gamers y creadores de videojuegos",
+        proveedor: p,
+        modelo: API.getModeloId(p),
+        enfoque: cfg.enfoque,
+        enfoque_nombre: ENFOQUE_NOMBRE[cfg.enfoque],
+        idioma: cfg.idioma,
+        instrucciones_extra: cfg.extra.trim(),
+        system_prompt: API.buildSystem(),
+        generado: new Date().toISOString()
+      };
+    },
+    conscienciaAJSON() {
+      return JSON.stringify(API.construirConciencia(), null, 2);
+    },
+    // Bloque de texto listo para pegar en un bot o en un script de juego.
+    conscienciaATexto() {
+      const c = API.construirConciencia();
+      return [
+        c.nombre + " · conciencia exportada (v" + c.version + ")",
+        "Rol: " + c.rol,
+        "Proveedor: " + NOMBRES[c.proveedor],
+        "Modelo: " + valor(c.modelo, "sin modelo"),
+        "Enfoque: " + c.enfoque_nombre,
+        "Idioma: " + valor(IDIOMA_IA[c.idioma], "español"),
+        "Instrucciones extra: " + valor(c.instrucciones_extra, "ninguna"),
+        "",
+        "System Prompt:",
+        c.system_prompt
+      ].join("\n");
+    },
+
+    /* ----- Cupo de exportaciones ----- */
+    // Estado para mostrar en la interfaz. total_disponibles es null si es ilimitado.
+    getExportEstado() {
+      const e = estadoExpo();
+      const baseRest = EXPORT_BASE - e.base_usadas;
+      const extrasDisp = e.extras_ganados - e.extras_usados;
+      const reinicio = e.ciclo_inicio + CICLO_MS;
+      return {
+        ilimitado: e.supporter,
+        supporter: e.supporter,
+        base_total: EXPORT_BASE,
+        base_restantes: baseRest,
+        extras_max: EXPORT_EXTRAS_MAX,
+        extras_ganados: e.extras_ganados,
+        extras_disponibles: extrasDisp,
+        total_disponibles: e.supporter ? null : baseRest + extrasDisp,
+        puede_exportar: e.supporter ? true : baseRest + extrasDisp > 0,
+        puede_ver_video: !e.supporter && e.extras_ganados < EXPORT_EXTRAS_MAX,
+        reinicio_ts: reinicio,
+        dias_para_reinicio: Math.max(0, Math.ceil((reinicio - Date.now()) / DIA_MS))
+      };
+    },
+    // Descuenta 1 exportación (primero la base semanal, luego los extras).
+    // Devuelve { ok, fuente: "base" o "extra" o "ilimitado", motivo, estado }.
+    consumirExportacion() {
+      const e = estadoExpo();
+      let fuente = "";
+      if (e.supporter) {
+        fuente = "ilimitado";
+      } else if (e.base_usadas < EXPORT_BASE) {
+        e.base_usadas += 1;
+        fuente = "base";
+      } else if (e.extras_usados < e.extras_ganados) {
+        e.extras_usados += 1;
+        fuente = "extra";
+      } else {
+        return { ok: false, motivo: "sin_cupo", estado: API.getExportEstado() };
+      }
+      if (fuente !== "ilimitado") guardarExpo();
+      return { ok: true, fuente, estado: API.getExportEstado() };
+    },
+    // +1 extra por video opcional visto (máximo +3 por ciclo semanal).
+    // Gancho para conectar un proveedor de anuncios: llama aquí al terminar el video.
+    sumarExtraPorVideo() {
+      const e = estadoExpo();
+      if (e.supporter) return { ok: false, motivo: "supporter", estado: API.getExportEstado() };
+      if (e.extras_ganados >= EXPORT_EXTRAS_MAX) return { ok: false, motivo: "tope", estado: API.getExportEstado() };
+      e.extras_ganados += 1;
+      guardarExpo();
+      return { ok: true, estado: API.getExportEstado() };
+    },
+    isSupporter: () => estadoExpo().supporter === true,
+    // Para pruebas e integración posterior (compras, código de supporter, etc.).
+    setSupporter(v) {
+      const e = estadoExpo();
+      e.supporter = v === true;
+      return guardarExpo();
     },
 
     // ----- Proveedor y modelo -----
@@ -490,13 +658,13 @@
       return lineas.join("\n").trim();
     },
 
-    // Borra solo la configuración (no los chats).
+    // Borra solo la configuración (no los chats ni el cupo de exportaciones).
     reset() {
       try { global.localStorage.removeItem(KEY); } catch (_) {}
       memoria = null;
       cfg = normalizar(null);
     },
-    // Borra configuración, keys y todos los chats.
+    // Borra configuración, keys y todos los chats (el cupo de exportaciones se conserva).
     resetTodo() {
       API.reset();
       try { global.localStorage.removeItem(KEY_CHATS); } catch (_) {}
