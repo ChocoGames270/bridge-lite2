@@ -40,6 +40,7 @@
     <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></symbol>
     <symbol id="i-cfg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1"/></symbol>
     <symbol id="i-logout" viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></symbol>
+    <symbol id="i-export" viewBox="0 0 24 24"><path d="M12 15V3M7 8l5-5 5 5M5 21h14"/></symbol>
   </svg>
 
   <div id="app">
@@ -64,6 +65,7 @@
             <button type="button" id="btn-fijar"><svg class="ic"><use href="#i-pin"/></svg><span id="txt-fijar">Fijar chat</span></button>
             <button type="button" id="btn-copiar-chat"><svg class="ic"><use href="#i-copy"/></svg><span>Copiar chat</span></button>
             <button type="button" id="btn-copiar-config"><svg class="ic"><use href="#i-cfg"/></svg><span>Copiar configuración</span></button>
+            <button type="button" id="btn-exportar"><svg class="ic"><use href="#i-export"/></svg><span>Exportar conciencia</span></button>
             <button type="button" id="btn-compartir-chat"><svg class="ic"><use href="#i-share"/></svg><span>Compartir</span></button>
             <button type="button" id="btn-borrar-chat" class="peligro"><svg class="ic"><use href="#i-trash"/></svg><span>Borrar chat</span></button>
           </div>
@@ -250,6 +252,64 @@
     </div>
   </div>
 
+  <!-- ============ MODAL: EXPORTAR CONCIENCIA ============ -->
+  <div id="modal-exportar" class="modal" hidden>
+    <div class="hoja" role="dialog" aria-modal="true" aria-labelledby="exportar-titulo">
+      <div class="hoja-cab">
+        <h2 id="exportar-titulo">Exportar conciencia</h2>
+        <button type="button" class="btn-ic" id="btn-exportar-x" aria-label="Cerrar">
+          <svg class="ic"><use href="#i-x"/></svg>
+        </button>
+      </div>
+
+      <div class="hoja-cuerpo">
+        <p class="cupo" id="exportar-cupo" role="status" aria-live="polite"></p>
+        <p class="estado" id="exportar-reinicio"></p>
+
+        <span class="etiqueta">Vista previa (sin tu API Key)</span>
+        <pre id="exportar-previa" class="previa"></pre>
+
+        <div id="exportar-bloqueo" class="bloqueo" hidden>
+          <p class="estado alerta">Te quedaste sin exportaciones esta semana.</p>
+          <div class="fila">
+            <button type="button" class="chip" id="btn-exportar-video">Ver video opcional (+1 exportación extra)</button>
+            <button type="button" class="chip" id="btn-exportar-supporter">Ser Supporter (ilimitado)</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="hoja-pie fila">
+        <button type="button" class="chip activo" id="btn-exportar-copiar">COPIAR JSON</button>
+        <button type="button" class="chip activo" id="btn-exportar-descargar">DESCARGAR .JSON</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ MODAL: VIDEO OPCIONAL (simulado) ============ -->
+  <div id="modal-video" class="modal" hidden>
+    <div class="hoja" role="dialog" aria-modal="true" aria-labelledby="video-titulo">
+      <div class="hoja-cab">
+        <h2 id="video-titulo">Video opcional</h2>
+        <button type="button" class="btn-ic" id="btn-video-x" aria-label="Cerrar">
+          <svg class="ic"><use href="#i-x"/></svg>
+        </button>
+      </div>
+
+      <div class="hoja-cuerpo">
+        <!-- Gancho: aquí se puede montar luego el reproductor de un proveedor de anuncios -->
+        <div id="video-slot" class="video-slot">
+          <p id="video-texto">Simulación de video</p>
+          <div id="video-cuenta" class="video-cuenta">5</div>
+        </div>
+        <p class="estado" id="video-estado" role="status" aria-live="polite"></p>
+      </div>
+
+      <div class="hoja-pie">
+        <button type="button" class="btn-primary" id="btn-video-ok" disabled>ESPERA...</button>
+      </div>
+    </div>
+  </div>
+
   <!-- ============ VISOR DE IMAGEN ============ -->
   <div id="visor" class="visor" hidden>
     <button type="button" class="btn-ic visor-x" id="visor-cerrar" aria-label="Cerrar imagen">
@@ -265,4 +325,4 @@
   <script src="js/consola.js?v=3"></script>
   <script src="js/cuenta.js?v=1"></script>
 </body>
-</html>
+          </html>
